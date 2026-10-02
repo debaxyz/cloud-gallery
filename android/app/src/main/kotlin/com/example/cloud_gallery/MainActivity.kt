@@ -1,4 +1,4 @@
-package com.example.deba
+package com.example.cloud_gallery
 
 import io.flutter.embedding.android.FlutterActivity
 
