@@ -1,3 +1,5 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,7 +12,17 @@ import 'utils/router.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Lock to portrait for a consistent gallery feel (optional)
+  // Firebase — requires google-services.json (Android) / GoogleService-Info.plist (iOS)
+  // generated from Firebase Console. See README for setup steps.
+  try {
+    await Firebase.initializeApp();
+  } catch (e, st) {
+    // Allow app to start even if Firebase config is missing (e.g. first clone).
+    // Sign-in will fail with a clear error until config is added.
+    debugPrint('Firebase.initializeApp failed: $e');
+    debugPrint('$st');
+  }
+
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,

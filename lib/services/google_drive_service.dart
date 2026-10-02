@@ -3,96 +3,47 @@ import 'dart:io';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
-import '../models/cloud_account.dart';
 import '../models/media_item.dart';
+import 'auth_service.dart';
 
-/// Scopes: drive.file keeps verification simple (only files created by the app).
-/// Switch to drive.readonly / drive if you need full Drive browsing.
-const _driveScopes = <String>[
-  drive.DriveApi.driveFileScope,
-  // Uncomment for broader access (requires extra verification):
-  // drive.DriveApi.driveReadonlyScope,
-];
-
+/// Google Drive operations.
+///
+/// Uses the same [GoogleSignIn] instance from [AuthService] so Drive scopes
+/// granted at sign-in are available. Do NOT use Firebase ID tokens for Drive.
 class GoogleDriveService {
-  GoogleDriveService();
+  GoogleDriveService(this._authService);
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: _driveScopes,
-  );
+  final AuthService _authService;
 
-  GoogleSignInAccount? _currentUser;
   drive.DriveApi? _driveApi;
   String? _appFolderId;
 
-  GoogleSignInAccount? get currentUser => _currentUser;
-  bool get isSignedIn => _currentUser != null;
+  GoogleSignIn get _googleSignIn => _authService.googleSignIn;
 
-  Future<CloudAccount?> signIn() async {
-    try {
-      final account = await _googleSignIn.signIn();
-      if (account == null) return null; // user cancelled
+  bool get isReady => _driveApi != null;
 
-      _currentUser = account;
-      await _initDriveApi();
-      await _ensureAppFolder();
-
-      return CloudAccount(
-        id: account.id,
-        email: account.email,
-        displayName: account.displayName,
-        photoUrl: account.photoUrl,
-        provider: 'google',
-        connectedAt: DateTime.now(),
-      );
-    } catch (e) {
-      throw GoogleDriveException('Sign-in failed: $e');
-    }
-  }
-
-  Future<CloudAccount?> signInSilently() async {
-    try {
-      final account = await _googleSignIn.signInSilently();
-      if (account == null) return null;
-      _currentUser = account;
-      await _initDriveApi();
-      await _ensureAppFolder();
-      return CloudAccount(
-        id: account.id,
-        email: account.email,
-        displayName: account.displayName,
-        photoUrl: account.photoUrl,
-        provider: 'google',
-        connectedAt: DateTime.now(),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> signOut() async {
-    await _googleSignIn.signOut();
-    _currentUser = null;
-    _driveApi = null;
-    _appFolderId = null;
-  }
-
-  Future<void> disconnect() async {
-    await _googleSignIn.disconnect();
-    _currentUser = null;
-    _driveApi = null;
-    _appFolderId = null;
+  Future<void> ensureInitialized() async {
+    if (_driveApi != null) return;
+    await _initDriveApi();
+    await _ensureAppFolder();
   }
 
   Future<void> _initDriveApi() async {
+    // Requires google_sign_in session with Drive scopes (set in AuthService).
     final httpClient = await _googleSignIn.authenticatedClient();
     if (httpClient == null) {
-      throw GoogleDriveException('Could not obtain authenticated client');
+      throw GoogleDriveException(
+        'Not signed in with Google, or Drive scope missing. Sign in again.',
+      );
     }
     _driveApi = drive.DriveApi(httpClient);
+  }
+
+  void reset() {
+    _driveApi = null;
+    _appFolderId = null;
   }
 
   /// Creates (or finds) a folder named "Cloud Gallery" in the user's Drive.
@@ -119,12 +70,12 @@ class GoogleDriveService {
     _appFolderId = created.id;
   }
 
-  /// List media files created by this app (or in the app folder).
+  /// List media files in the app folder.
   Future<List<MediaItem>> listMedia({
     int pageSize = 50,
     String? pageToken,
   }) async {
-    if (_driveApi == null) throw GoogleDriveException('Not signed in');
+    await ensureInitialized();
 
     final q = _appFolderId != null
         ? "'$_appFolderId' in parents and trashed = false and (mimeType contains 'image/' or mimeType contains 'video/')"
@@ -139,11 +90,7 @@ class GoogleDriveService {
       orderBy: 'modifiedTime desc',
     );
 
-    final items = <MediaItem>[];
-    for (final f in response.files ?? []) {
-      items.add(_fileToMediaItem(f));
-    }
-    return items;
+    return (response.files ?? []).map(_fileToMediaItem).toList();
   }
 
   MediaItem _fileToMediaItem(drive.File f) {
@@ -190,11 +137,10 @@ class GoogleDriveService {
 
   /// Upload a local file into the app folder.
   Future<MediaItem> uploadFile(File file, {String? customName}) async {
-    if (_driveApi == null) throw GoogleDriveException('Not signed in');
+    await ensureInitialized();
     await _ensureAppFolder();
 
     final name = customName ?? file.uri.pathSegments.last;
-    final mime = _guessMime(name);
 
     final driveFile = drive.File()
       ..name = name
@@ -206,7 +152,6 @@ class GoogleDriveService {
       uploadMedia: media,
     );
 
-    // Re-fetch with full metadata
     final full = await _driveApi!.files.get(
       created.id!,
       $fields:
@@ -218,8 +163,9 @@ class GoogleDriveService {
 
   /// Download a Drive file to a temporary location.
   Future<File> downloadFile(MediaItem item) async {
-    if (_driveApi == null || item.driveFileId == null) {
-      throw GoogleDriveException('Cannot download');
+    await ensureInitialized();
+    if (item.driveFileId == null) {
+      throw GoogleDriveException('Cannot download: missing file id');
     }
 
     final dir = await getTemporaryDirectory();
@@ -238,27 +184,15 @@ class GoogleDriveService {
   }
 
   Future<void> deleteFile(String fileId) async {
-    if (_driveApi == null) throw GoogleDriveException('Not signed in');
+    await ensureInitialized();
     await _driveApi!.files.delete(fileId);
-  }
-
-  String _guessMime(String name) {
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.gif')) return 'image/gif';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.heic')) return 'image/heic';
-    if (lower.endsWith('.mp4')) return 'video/mp4';
-    if (lower.endsWith('.mov')) return 'video/quicktime';
-    if (lower.endsWith('.mkv')) return 'video/x-matroska';
-    return 'application/octet-stream';
   }
 }
 
 class GoogleDriveException implements Exception {
-  final String message;
   GoogleDriveException(this.message);
+  final String message;
+
   @override
   String toString() => message;
 }
