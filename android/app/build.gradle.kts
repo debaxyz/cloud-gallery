@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.cloud_gallery"
+    namespace = "com.canopas.cloud_gallery"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.cloud_gallery"
+        applicationId = "com.canopas.cloud_gallery"
         // photo_manager + google_sign_in need API 21+
         minSdk = maxOf(flutter.minSdkVersion, 21)
         targetSdk = flutter.targetSdkVersion
