@@ -1,5 +1,6 @@
 # Cloud Gallery
 
+
 Flutter app for photos & videos on **device + Google Drive**, with **Firebase Authentication (Google Sign-In)**.
 
 ## Auth architecture
