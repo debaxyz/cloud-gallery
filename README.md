@@ -1,106 +1,78 @@
 # Cloud Gallery
 
+A beautiful Flutter app to manage, organize, and back up photos & videos from **local storage**, **Google Drive**, and **Dropbox** — all in one place.
 
-Flutter app for photos & videos on **device + Google Drive**, with **Firebase Authentication (Google Sign-In)**.
-
-## Auth architecture
-
-```
-User taps "Sign in with Google"
-        │
-        ▼
- Google Sign-In (scopes: drive.file)
-        │
-        ├──► Firebase Auth  (idToken / accessToken → GoogleAuthProvider.credential)
-        │         └── app user session (uid, email)
-        │
-        └──► Google Drive API  (same GoogleSignIn authenticated HTTP client)
-                  └── list / upload / download / delete
-```
-
-**Important:** Firebase ID tokens are **not** valid for the Drive API.  
-Drive always uses the Google Sign-In access token (via `extension_google_sign_in_as_googleapis_auth`).
-
-## Firebase + Google Sign-In setup
-
-### 1. Firebase project
-
-1. Open [Firebase Console](https://console.firebase.google.com/)
-2. Create a project (or use an existing one)
-3. Add an **Android** app:
-   - Package name: `com.example.cloud_gallery`
-   - Download **`google-services.json`**
-   - Place it at: `android/app/google-services.json`
-
-### 2. Enable Google Sign-In in Firebase
-
-1. Firebase Console → **Authentication** → **Sign-in method**
-2. Enable **Google**
-3. Set support email → Save
-
-### 3. Google Cloud (Drive API + OAuth)
-
-Firebase creates a Google Cloud project automatically.
-
-1. [Google Cloud Console](https://console.cloud.google.com/) → select the **same** project
-2. **APIs & Services → Library** → enable **Google Drive API**
-3. **OAuth consent screen** → add scope:
-   - `https://www.googleapis.com/auth/drive.file`
-4. **Credentials**:
-   - Ensure an **Android** OAuth client exists with:
-     - Package: `com.example.cloud_gallery`
-     - **SHA-1** of your debug (and release) keystore
-
-#### Debug SHA-1
-
-```bash
-keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
-```
-
-Add that SHA-1 under Firebase Project settings → Your Android app → Add fingerprint  
-(and/or in Google Cloud OAuth Android client).
-
-### 4. Run
-
-```bash
-flutter pub get
-flutter run -d android
-```
+Inspired by the open-source [Canopas Cloud Gallery](https://github.com/canopas/cloud-gallery).
 
 ## Features
 
-- Firebase Auth + Google Sign-In
-- Device gallery (photo_manager)
-- Google Drive browse / upload / download / delete
-- Onboarding, multi-select, preview, details, accounts
-- Material 3 light / dark / system
+- 📸 Unified media gallery (Local + Google Drive + Dropbox)
+- ☁️ Connect / disconnect cloud accounts
+- 🔄 Multi-select → Upload / Download / Delete
+- 🖼️ Full-screen media preview with metadata
+- 🌙 Light & Dark theme support
+- ✨ Modern Material 3 UI
+- 📱 Works on Android, iOS & Web
 
-## Project layout
+> **Note**: This is a fully functional **demo** with realistic mock data.  
+> Replace `MediaService` and `AccountService` with real Google Drive / Dropbox API integrations for production.
+
+## Screenshots flow
+
+1. **Onboarding** – 3 beautiful intro pages  
+2. **Gallery** – Filterable grid (All / Local / Drive / Dropbox)  
+3. **Accounts** – Connect cloud providers, view storage usage  
+4. **Media Detail** – Zoomable preview + actions  
+
+## Tech Stack
+
+| Category          | Package              |
+|-------------------|----------------------|
+| State management  | flutter_riverpod     |
+| Navigation        | go_router            |
+| Local media       | photo_manager        |
+| Caching           | cached_network_image |
+| Preferences       | shared_preferences   |
+
+## Getting Started
+
+```bash
+# Clone / open the project
+cd cloud_gallery
+
+# Get dependencies
+flutter pub get
+
+# Run on Chrome (web)
+flutter run -d chrome
+
+# Run on Android / iOS emulator
+flutter run
+```
+
+## Project Structure
 
 ```
 lib/
-├── main.dart                 # Firebase.initializeApp()
-├── services/
-│   ├── auth_service.dart     # Firebase + Google Sign-In
-│   ├── google_drive_service.dart
-│   ├── local_media_service.dart
-│   └── prefs_service.dart
-├── providers/
-│   ├── auth_provider.dart
-│   └── ...
-└── screens/ ...
+├── main.dart
+└── src/
+    ├── models/          # MediaItem, CloudAccount
+    ├── providers/       # Riverpod providers
+    ├── screens/         # UI screens
+    ├── widgets/         # Reusable widgets
+    ├── services/        # Mock media & account services
+    ├── theme/           # AppTheme (light/dark)
+    └── router/          # GoRouter config
 ```
 
-## Common errors
+## Next Steps (Production)
 
-| Error | Fix |
-|-------|-----|
-| `Firebase.initializeApp` fails | Missing / wrong `google-services.json` |
-| `DEVELOPER_ERROR` / code 10 | SHA-1 not registered for the package |
-| `operation-not-allowed` | Enable Google in Firebase Auth |
-| Drive API 403 | Drive API not enabled, or scope missing |
-| `MissingPluginException` photo_manager | Run on **Android device/emulator**, not web |
+1. Add real Google Sign-In + Drive API
+2. Add Dropbox OAuth + API
+3. Use `photo_manager` for real local gallery
+4. Implement background upload / auto-backup
+5. Add Firebase Analytics & Crashlytics
 
 ## License
 
-MIT
+Apache 2.0 — free to use and modify.

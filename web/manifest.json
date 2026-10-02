@@ -1,6 +1,6 @@
 {
-    "name": "deba",
-    "short_name": "deba",
+    "name": "cloud_gallery",
+    "short_name": "cloud_gallery",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
