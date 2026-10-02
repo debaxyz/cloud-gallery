@@ -2,7 +2,7 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services")
+  //  id("com.google.gms.google-services")
 }
 
 android {
@@ -94,6 +94,6 @@ flutter {
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.24")
     
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-auth")
+    //implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+   // implementation("com.google.firebase:firebase-auth")
 }
