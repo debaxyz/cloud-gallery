@@ -159,9 +159,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       return;
     }
 
-    final signedIn = ref.read(isSignedInProvider);
-    if (!signedIn) {
-      _snack('Sign in to Google Drive first (Accounts)');
+    final driveOk = ref.read(driveConnectedProvider);
+    if (!driveOk) {
+      _snack('Connect Google Drive first (Accounts or Drive tab)');
       return;
     }
 
@@ -303,52 +303,63 @@ class _DeviceTab extends ConsumerWidget {
 class _DriveTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authStateProvider);
     final async = ref.watch(driveMediaProvider);
+    final driveConnected = ref.watch(driveConnectedProvider);
 
-    return auth.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => _ErrorView(
-        message: 'Sign-in error: $e',
-        onRetry: () => ref.read(authStateProvider.notifier).signIn(),
-      ),
-      data: (account) {
-        if (account == null) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.cloud_off_outlined,
-                      size: 64, color: Theme.of(context).colorScheme.outline),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Connect Google Drive',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Sign in to browse, upload and back up your media.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: () =>
-                        ref.read(authStateProvider.notifier).signIn(),
-                    icon: const Icon(Icons.login),
-                    label: const Text('Sign in with Google'),
-                  ),
-                ],
+    // Firebase email account (optional for Drive — Drive has its own Google OAuth)
+    if (!driveConnected) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off_outlined,
+                  size: 64, color: Theme.of(context).colorScheme.outline),
+              const SizedBox(height: 16),
+              Text(
+                'Connect Google Drive',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-            ),
-          );
-        }
+              const SizedBox(height: 8),
+              Text(
+                'Link Google Drive to browse, upload, and back up media.\n'
+                'App login uses email/password (Accounts).',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () async {
+                  try {
+                    final ok = await ref
+                        .read(driveConnectedProvider.notifier)
+                        .connect();
+                    if (!ok && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Drive connection cancelled')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$e')),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.add_to_drive),
+                label: const Text('Connect Google Drive'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
-        return async.when(
+    return async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => _ErrorView(
             message: 'Could not load Drive media.\n$e',
@@ -383,8 +394,6 @@ class _DriveTab extends ConsumerWidget {
             );
           },
         );
-      },
-    );
   }
 }
 

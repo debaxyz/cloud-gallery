@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../providers/auth_provider.dart';
-import '../../providers/prefs_provider.dart';
+import '../../providers/media_provider.dart';
 
 class AccountsScreen extends ConsumerWidget {
   const AccountsScreen({super.key});
@@ -11,8 +12,7 @@ class AccountsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authStateProvider);
-    final prefs = ref.watch(prefsServiceProvider);
-    final saved = prefs.getAccounts();
+    final driveConnected = ref.watch(driveConnectedProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Accounts')),
@@ -20,7 +20,7 @@ class AccountsScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Connected services',
+            'App account (Firebase Email)',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -30,7 +30,7 @@ class AccountsScreen extends ConsumerWidget {
             loading: () => const Card(
               child: ListTile(
                 leading: CircularProgressIndicator(),
-                title: Text('Checking account…'),
+                title: Text('Loading…'),
               ),
             ),
             error: (e, _) => Card(
@@ -39,9 +39,8 @@ class AccountsScreen extends ConsumerWidget {
                 title: const Text('Error'),
                 subtitle: Text('$e'),
                 trailing: TextButton(
-                  onPressed: () =>
-                      ref.read(authStateProvider.notifier).signIn(),
-                  child: const Text('Retry'),
+                  onPressed: () => context.push('/auth'),
+                  child: const Text('Sign in'),
                 ),
               ),
             ),
@@ -52,14 +51,13 @@ class AccountsScreen extends ConsumerWidget {
                     leading: CircleAvatar(
                       backgroundColor:
                           Theme.of(context).colorScheme.primaryContainer,
-                      child: const Icon(Icons.cloud_outlined),
+                      child: const Icon(Icons.email_outlined),
                     ),
-                    title: const Text('Google Drive'),
-                    subtitle: const Text('Not connected'),
+                    title: const Text('Email account'),
+                    subtitle: const Text('Not signed in'),
                     trailing: FilledButton(
-                      onPressed: () =>
-                          ref.read(authStateProvider.notifier).signIn(),
-                      child: const Text('Connect'),
+                      onPressed: () => context.push('/auth'),
+                      child: const Text('Sign in'),
                     ),
                   ),
                 );
@@ -70,20 +68,20 @@ class AccountsScreen extends ConsumerWidget {
                   children: [
                     ListTile(
                       leading: CircleAvatar(
-                        backgroundImage: account.photoUrl != null
-                            ? NetworkImage(account.photoUrl!)
-                            : null,
-                        child: account.photoUrl == null
-                            ? Text(account.email[0].toUpperCase())
-                            : null,
+                        child: Text(
+                          () {
+                            final s = account.displayName ?? account.email;
+                            return s.isNotEmpty ? s[0].toUpperCase() : '?';
+                          }(),
+                        ),
                       ),
-                      title: Text(account.displayName ?? 'Google Account'),
+                      title: Text(account.displayName ?? 'User'),
                       subtitle: Text(account.email),
                     ),
                     const Divider(height: 1),
                     ListTile(
                       dense: true,
-                      title: const Text('Connected'),
+                      title: const Text('Signed in'),
                       trailing: Text(
                         DateFormat.yMMMd().format(account.connectedAt),
                         style: Theme.of(context).textTheme.bodySmall,
@@ -91,63 +89,19 @@ class AccountsScreen extends ConsumerWidget {
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () async {
-                                await ref
-                                    .read(authStateProvider.notifier)
-                                    .signOut();
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Signed out')),
-                                  );
-                                }
-                              },
-                              child: const Text('Sign out'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton(
-                              style: FilledButton.styleFrom(
-                                backgroundColor:
-                                    Theme.of(context).colorScheme.error,
-                              ),
-                              onPressed: () async {
-                                final ok = await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Disconnect?'),
-                                    content: const Text(
-                                      'This revokes access. You can reconnect later.',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, false),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      FilledButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, true),
-                                        child: const Text('Disconnect'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                                if (ok == true) {
-                                  await ref
-                                      .read(authStateProvider.notifier)
-                                      .disconnect();
-                                }
-                              },
-                              child: const Text('Disconnect'),
-                            ),
-                          ),
-                        ],
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            await ref.read(authStateProvider.notifier).signOut();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Signed out')),
+                              );
+                            }
+                          },
+                          child: const Text('Sign out'),
+                        ),
                       ),
                     ),
                   ],
@@ -155,34 +109,65 @@ class AccountsScreen extends ConsumerWidget {
               );
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           Text(
-            'About permissions',
-            style: Theme.of(context).textTheme.titleMedium,
+            'Google Drive',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                child: const Icon(Icons.add_to_drive),
+              ),
+              title: const Text('Google Drive'),
+              subtitle: Text(
+                driveConnected ? 'Connected' : 'Not connected',
+              ),
+              trailing: driveConnected
+                  ? OutlinedButton(
+                      onPressed: () async {
+                        await ref
+                            .read(driveConnectedProvider.notifier)
+                            .disconnect();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Drive disconnected')),
+                          );
+                        }
+                      },
+                      child: const Text('Disconnect'),
+                    )
+                  : FilledButton(
+                      onPressed: () async {
+                        try {
+                          await ref
+                              .read(driveConnectedProvider.notifier)
+                              .connect();
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('$e')),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('Connect'),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 16),
           Text(
-            'Cloud Gallery uses the drive.file scope so it can only see files '
-            'it creates (inside a “Cloud Gallery” folder). Your other Drive '
-            'files stay private.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            'App login uses Firebase Email/Password. '
+            'Google Drive is linked separately when you need cloud media.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
           ),
-          if (saved.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text(
-              'Previously connected',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            ...saved.map(
-              (a) => ListTile(
-                leading: const Icon(Icons.history),
-                title: Text(a.email),
-                subtitle: Text(a.provider),
-              ),
-            ),
-          ],
         ],
       ),
     );

@@ -3,14 +3,48 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/media_item.dart';
+import '../services/google_drive_service.dart';
 import '../services/local_media_service.dart';
-import 'auth_provider.dart';
 
 final localMediaServiceProvider = Provider<LocalMediaService>((ref) {
   return LocalMediaService();
 });
 
-/// Currently selected media items (for multi-select actions).
+final googleDriveServiceProvider = Provider<GoogleDriveService>((ref) {
+  return GoogleDriveService();
+});
+
+/// Whether Google Drive OAuth is connected (separate from Firebase email auth).
+final driveConnectedProvider =
+    StateNotifierProvider<DriveConnectedNotifier, bool>((ref) {
+  return DriveConnectedNotifier(ref);
+});
+
+class DriveConnectedNotifier extends StateNotifier<bool> {
+  DriveConnectedNotifier(this._ref) : super(false) {
+    _trySilent();
+  }
+
+  final Ref _ref;
+
+  Future<void> _trySilent() async {
+    final ok =
+        await _ref.read(googleDriveServiceProvider).connectSilently();
+    state = ok;
+  }
+
+  Future<bool> connect() async {
+    final account = await _ref.read(googleDriveServiceProvider).connect();
+    state = account != null;
+    return state;
+  }
+
+  Future<void> disconnect() async {
+    await _ref.read(googleDriveServiceProvider).disconnect();
+    state = false;
+  }
+}
+
 final selectedMediaProvider =
     StateNotifierProvider<SelectedMediaNotifier, Set<String>>((ref) {
   return SelectedMediaNotifier();
@@ -28,13 +62,10 @@ class SelectedMediaNotifier extends StateNotifier<Set<String>> {
   }
 
   void clear() => state = {};
-
   void selectAll(Iterable<String> ids) => state = ids.toSet();
-
   bool isSelected(String id) => state.contains(id);
 }
 
-/// Device media list with simple pagination.
 final deviceMediaProvider =
     StateNotifierProvider<DeviceMediaNotifier, AsyncValue<List<MediaItem>>>(
         (ref) {
@@ -78,14 +109,12 @@ class DeviceMediaNotifier extends StateNotifier<AsyncValue<List<MediaItem>>> {
       final current = state.valueOrNull ?? [];
       state = AsyncValue.data([...current, ...more]);
     } catch (_) {
-      // keep existing data on partial failure
     } finally {
       _loadingMore = false;
     }
   }
 }
 
-/// Google Drive media list.
 final driveMediaProvider =
     StateNotifierProvider<DriveMediaNotifier, AsyncValue<List<MediaItem>>>(
         (ref) {
@@ -94,9 +123,8 @@ final driveMediaProvider =
 
 class DriveMediaNotifier extends StateNotifier<AsyncValue<List<MediaItem>>> {
   DriveMediaNotifier(this._ref) : super(const AsyncValue.data([])) {
-    // Reload when auth changes
-    _ref.listen(authStateProvider, (prev, next) {
-      if (next.valueOrNull != null) {
+    _ref.listen(driveConnectedProvider, (prev, next) {
+      if (next) {
         load(refresh: true);
       } else {
         state = const AsyncValue.data([]);
@@ -107,8 +135,7 @@ class DriveMediaNotifier extends StateNotifier<AsyncValue<List<MediaItem>>> {
   final Ref _ref;
 
   Future<void> load({bool refresh = false}) async {
-    final signedIn = _ref.read(isSignedInProvider);
-    if (!signedIn) {
+    if (!_ref.read(driveConnectedProvider)) {
       state = const AsyncValue.data([]);
       return;
     }
@@ -122,11 +149,9 @@ class DriveMediaNotifier extends StateNotifier<AsyncValue<List<MediaItem>>> {
     }
   }
 
-  /// Upload local media items to the Cloud Gallery folder on Drive.
   Future<int> upload(List<MediaItem> localItems) async {
     final drive = _ref.read(googleDriveServiceProvider);
     var success = 0;
-
     for (final item in localItems) {
       if (item.localPath == null) continue;
       final file = File(item.localPath!);
@@ -134,32 +159,23 @@ class DriveMediaNotifier extends StateNotifier<AsyncValue<List<MediaItem>>> {
       try {
         await drive.uploadFile(file, customName: item.name);
         success++;
-      } catch (_) {
-        // continue with remaining files
-      }
+      } catch (_) {}
     }
-
     await load(refresh: true);
     return success;
   }
 
-  /// Download Drive items and save them into the device gallery.
   Future<int> download(List<MediaItem> driveItems) async {
     final drive = _ref.read(googleDriveServiceProvider);
     final local = _ref.read(localMediaServiceProvider);
     var success = 0;
-
     for (final item in driveItems) {
       try {
         final file = await drive.downloadFile(item);
         await local.saveToGallery(file, isVideo: item.isVideo);
         success++;
-      } catch (_) {
-        // continue with remaining files
-      }
+      } catch (_) {}
     }
-
-    // Refresh device list so newly saved items appear
     await _ref.read(deviceMediaProvider.notifier).load(refresh: true);
     return success;
   }
@@ -176,5 +192,4 @@ class DriveMediaNotifier extends StateNotifier<AsyncValue<List<MediaItem>>> {
   }
 }
 
-/// Active tab: 0 = Device, 1 = Drive
 final homeTabProvider = StateProvider<int>((ref) => 0);

@@ -1,155 +1,114 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:googleapis/drive/v3.dart' as drive;
 
 import '../models/cloud_account.dart';
 
-/// Scopes requested at Google Sign-In time.
-/// Drive scopes MUST be requested here — Firebase Auth alone cannot access Drive.
-const googleSignInScopes = <String>[
-  drive.DriveApi.driveFileScope,
-  // Uncomment for full Drive read (needs extra OAuth verification):
-  // drive.DriveApi.driveReadonlyScope,
-];
-
-/// Handles Firebase Authentication + Google Sign-In.
-///
-/// Important:
-/// - Firebase Auth is used for app user identity (uid, session).
-/// - Google Drive API still needs the GoogleSignIn access token / authenticated
-///   HTTP client. Firebase ID tokens are NOT valid for Drive.
+/// Firebase Authentication with **Email / Password** only.
+/// Google Sign-In provider removed from Firebase Auth.
 class AuthService {
-  AuthService({
-    FirebaseAuth? firebaseAuth,
-    GoogleSignIn? googleSignIn,
-  })  : _auth = firebaseAuth ?? FirebaseAuth.instance,
-        _googleSignIn = googleSignIn ??
-            GoogleSignIn(
-              scopes: googleSignInScopes,
-            );
+  AuthService({FirebaseAuth? firebaseAuth})
+      : _auth = firebaseAuth ?? FirebaseAuth.instance;
 
   final FirebaseAuth _auth;
-  final GoogleSignIn _googleSignIn;
-
-  /// Shared instance so [GoogleDriveService] can build an authenticated client.
-  GoogleSignIn get googleSignIn => _googleSignIn;
 
   User? get firebaseUser => _auth.currentUser;
-  GoogleSignInAccount? get googleUser => _googleSignIn.currentUser;
-
-  bool get isSignedIn =>
-      _auth.currentUser != null || _googleSignIn.currentUser != null;
-
+  bool get isSignedIn => _auth.currentUser != null;
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  /// Interactive Google Sign-In → Firebase credential → Drive-ready session.
-  Future<CloudAccount?> signInWithGoogle() async {
+  CloudAccount _toAccount(User user) {
+    return CloudAccount(
+      id: user.uid,
+      email: user.email ?? '',
+      displayName: user.displayName ?? user.email?.split('@').first,
+      photoUrl: user.photoURL,
+      provider: 'password',
+      connectedAt: DateTime.now(),
+    );
+  }
+
+  Future<CloudAccount> signUpWithEmail({
+    required String email,
+    required String password,
+    String? displayName,
+  }) async {
     try {
-      // 1) Google account picker (requests Drive scopes)
-      final GoogleSignInAccount? account = await _googleSignIn.signIn();
-      if (account == null) return null; // user cancelled
-
-      // 2) Tokens for Firebase
-      final GoogleSignInAuthentication googleAuth = await account.authentication;
-
-      if (googleAuth.idToken == null && googleAuth.accessToken == null) {
-        throw AuthException('Google Sign-In returned no tokens');
+      final cred = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final user = cred.user;
+      if (user == null) {
+        throw AuthException('Sign-up failed: no user returned');
       }
-
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // 3) Firebase Auth session
-      final UserCredential userCredential =
-          await _auth.signInWithCredential(credential);
-      final user = userCredential.user;
-
-      return CloudAccount(
-        id: user?.uid ?? account.id,
-        email: user?.email ?? account.email,
-        displayName: user?.displayName ?? account.displayName,
-        photoUrl: user?.photoURL ?? account.photoUrl,
-        provider: 'google',
-        connectedAt: DateTime.now(),
-      );
+      if (displayName != null && displayName.trim().isNotEmpty) {
+        await user.updateDisplayName(displayName.trim());
+        await user.reload();
+      }
+      return _toAccount(_auth.currentUser ?? user);
     } on FirebaseAuthException catch (e) {
-      throw AuthException(_mapFirebaseError(e));
-    } catch (e) {
-      if (e is AuthException) rethrow;
-      throw AuthException('Sign-in failed: $e');
+      throw AuthException(_mapError(e));
     }
   }
 
-  /// Restore previous session without UI (app start).
-  Future<CloudAccount?> signInSilently() async {
+  Future<CloudAccount> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
     try {
-      // Prefer existing Firebase session
-      final current = _auth.currentUser;
-      if (current != null) {
-        // Re-attach Google Sign-In so Drive client works
-        final googleAccount =
-            await _googleSignIn.signInSilently() ?? _googleSignIn.currentUser;
-        return CloudAccount(
-          id: current.uid,
-          email: current.email ?? googleAccount?.email ?? '',
-          displayName: current.displayName ?? googleAccount?.displayName,
-          photoUrl: current.photoURL ?? googleAccount?.photoUrl,
-          provider: 'google',
-          connectedAt: DateTime.now(),
-        );
+      final cred = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final user = cred.user;
+      if (user == null) {
+        throw AuthException('Sign-in failed: no user returned');
       }
-
-      // No Firebase user — try silent Google + then Firebase
-      final account = await _googleSignIn.signInSilently();
-      if (account == null) return null;
-
-      final googleAuth = await account.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-      final userCredential = await _auth.signInWithCredential(credential);
-      final user = userCredential.user;
-
-      return CloudAccount(
-        id: user?.uid ?? account.id,
-        email: user?.email ?? account.email,
-        displayName: user?.displayName ?? account.displayName,
-        photoUrl: user?.photoURL ?? account.photoUrl,
-        provider: 'google',
-        connectedAt: DateTime.now(),
-      );
-    } catch (_) {
-      return null;
+      return _toAccount(user);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mapError(e));
     }
   }
 
-  /// Sign out of Firebase + Google (keeps app permission grant).
+  Future<CloudAccount?> restoreSession() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    return _toAccount(user);
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mapError(e));
+    }
+  }
+
   Future<void> signOut() async {
-    await Future.wait([
-      _auth.signOut(),
-      _googleSignIn.signOut(),
-    ]);
-  }
-
-  /// Revoke Google access + sign out (user must consent again next time).
-  Future<void> disconnect() async {
     await _auth.signOut();
-    await _googleSignIn.disconnect();
   }
 
-  String _mapFirebaseError(FirebaseAuthException e) {
+  Future<void> disconnect() => signOut();
+
+  String _mapError(FirebaseAuthException e) {
     switch (e.code) {
-      case 'account-exists-with-different-credential':
-        return 'An account already exists with a different sign-in method.';
-      case 'invalid-credential':
-        return 'Invalid Google credential. Try again.';
-      case 'operation-not-allowed':
-        return 'Google Sign-In is not enabled in Firebase Console.';
+      case 'invalid-email':
+        return 'That email address looks invalid.';
       case 'user-disabled':
         return 'This account has been disabled.';
+      case 'user-not-found':
+        return 'No account found for that email.';
+      case 'wrong-password':
+        return 'Incorrect password.';
+      case 'invalid-credential':
+        return 'Incorrect email or password.';
+      case 'email-already-in-use':
+        return 'An account already exists with that email.';
+      case 'weak-password':
+        return 'Password is too weak (use at least 6 characters).';
+      case 'operation-not-allowed':
+        return 'Email/password is not enabled in Firebase Console.\n'
+            'Authentication → Sign-in method → Email/Password → Enable';
+      case 'too-many-requests':
+        return 'Too many attempts. Try again later.';
       case 'network-request-failed':
         return 'Network error. Check your connection.';
       default:

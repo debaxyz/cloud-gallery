@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../models/media_item.dart';
 import '../providers/prefs_provider.dart';
 import '../screens/accounts/accounts_screen.dart';
+import '../screens/auth/email_auth_screen.dart';
 import '../screens/details/details_screen.dart';
 import '../screens/home/home_screen.dart';
 import '../screens/onboarding/onboarding_screen.dart';
@@ -19,6 +20,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/auth',
+        builder: (context, state) {
+          final fromDrive = state.uri.queryParameters['from'] == 'drive';
+          return EmailAuthScreen(fromDrive: fromDrive);
+        },
       ),
       GoRoute(
         path: '/',
@@ -54,7 +62,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           children: [
             const Icon(Icons.error_outline, size: 48),
             const SizedBox(height: 16),
-            Text('Page not found', style: Theme.of(context).textTheme.titleLarge),
+            Text('Page not found',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             FilledButton(
               onPressed: () => context.go('/'),

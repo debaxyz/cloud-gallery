@@ -6,81 +6,110 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/media_item.dart';
-import 'auth_service.dart';
 
-/// Google Drive operations.
-///
-/// Uses the same [GoogleSignIn] instance from [AuthService] so Drive scopes
-/// granted at sign-in are available. Do NOT use Firebase ID tokens for Drive.
+/// Google Drive connection (optional). Independent of Firebase Email auth.
 class GoogleDriveService {
-  GoogleDriveService(this._authService);
+  GoogleDriveService();
 
-  final AuthService _authService;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: <String>[drive.DriveApi.driveFileScope],
+  );
 
   drive.DriveApi? _driveApi;
   String? _appFolderId;
+  GoogleSignInAccount? _account;
 
-  GoogleSignIn get _googleSignIn => _authService.googleSignIn;
+  GoogleSignInAccount? get googleAccount => _account;
+  bool get isConnected => _account != null;
 
-  bool get isReady => _driveApi != null;
-
-  Future<void> ensureInitialized() async {
-    if (_driveApi != null) return;
-    await _initDriveApi();
-    await _ensureAppFolder();
+  Future<GoogleSignInAccount?> connect() async {
+    try {
+      await _googleSignIn.signOut();
+      final account = await _googleSignIn.signIn();
+      if (account == null) return null;
+      _account = account;
+      await _initDriveApi();
+      await _ensureAppFolder();
+      return account;
+    } catch (e) {
+      _account = null;
+      _driveApi = null;
+      throw GoogleDriveException('Could not connect Google Drive: $e');
+    }
   }
 
-  Future<void> _initDriveApi() async {
-    // Requires google_sign_in session with Drive scopes (set in AuthService).
-    final httpClient = await _googleSignIn.authenticatedClient();
-    if (httpClient == null) {
-      throw GoogleDriveException(
-        'Not signed in with Google, or Drive scope missing. Sign in again.',
-      );
+  Future<bool> connectSilently() async {
+    try {
+      final account = await _googleSignIn.signInSilently();
+      if (account == null) return false;
+      _account = account;
+      await _initDriveApi();
+      await _ensureAppFolder();
+      return true;
+    } catch (_) {
+      return false;
     }
-    _driveApi = drive.DriveApi(httpClient);
+  }
+
+  Future<void> disconnect() async {
+    try {
+      await _googleSignIn.disconnect();
+    } catch (_) {
+      await _googleSignIn.signOut();
+    }
+    reset();
   }
 
   void reset() {
     _driveApi = null;
     _appFolderId = null;
+    _account = null;
   }
 
-  /// Creates (or finds) a folder named "Cloud Gallery" in the user's Drive.
+  Future<void> ensureInitialized() async {
+    if (_driveApi != null) return;
+    if (_googleSignIn.currentUser == null) {
+      final ok = await connectSilently();
+      if (!ok) throw GoogleDriveException('Google Drive is not connected');
+      return;
+    }
+    _account = _googleSignIn.currentUser;
+    await _initDriveApi();
+    await _ensureAppFolder();
+  }
+
+  Future<void> _initDriveApi() async {
+    final httpClient = await _googleSignIn.authenticatedClient();
+    if (httpClient == null) {
+      throw GoogleDriveException('Could not get Drive credentials');
+    }
+    _driveApi = drive.DriveApi(httpClient);
+  }
+
   Future<void> _ensureAppFolder() async {
     if (_driveApi == null) return;
     const folderName = 'Cloud Gallery';
-
     final result = await _driveApi!.files.list(
       q: "mimeType = 'application/vnd.google-apps.folder' and name = '$folderName' and trashed = false",
       spaces: 'drive',
       $fields: 'files(id, name)',
     );
-
     if (result.files != null && result.files!.isNotEmpty) {
       _appFolderId = result.files!.first.id;
       return;
     }
-
     final folder = drive.File()
       ..name = folderName
       ..mimeType = 'application/vnd.google-apps.folder';
-
     final created = await _driveApi!.files.create(folder);
     _appFolderId = created.id;
   }
 
-  /// List media files in the app folder.
-  Future<List<MediaItem>> listMedia({
-    int pageSize = 50,
-    String? pageToken,
-  }) async {
+  Future<List<MediaItem>> listMedia({int pageSize = 50, String? pageToken}) async {
     await ensureInitialized();
-
     final q = _appFolderId != null
         ? "'$_appFolderId' in parents and trashed = false and (mimeType contains 'image/' or mimeType contains 'video/')"
         : "trashed = false and (mimeType contains 'image/' or mimeType contains 'video/')";
-
     final response = await _driveApi!.files.list(
       q: q,
       pageSize: pageSize,
@@ -89,7 +118,6 @@ class GoogleDriveService {
           'nextPageToken, files(id, name, mimeType, size, createdTime, modifiedTime, imageMediaMetadata, videoMediaMetadata, thumbnailLink, webContentLink, webViewLink)',
       orderBy: 'modifiedTime desc',
     );
-
     return (response.files ?? []).map(_fileToMediaItem).toList();
   }
 
@@ -100,7 +128,6 @@ class GoogleDriveService {
         : mime.startsWith('video/')
             ? MediaType.video
             : MediaType.unknown;
-
     int? width, height;
     Duration? duration;
     if (f.imageMediaMetadata != null) {
@@ -115,7 +142,6 @@ class GoogleDriveService {
         duration = Duration(milliseconds: int.tryParse(ms) ?? 0);
       }
     }
-
     return MediaItem(
       id: f.id ?? '',
       name: f.name ?? 'Untitled',
@@ -135,48 +161,34 @@ class GoogleDriveService {
     );
   }
 
-  /// Upload a local file into the app folder.
   Future<MediaItem> uploadFile(File file, {String? customName}) async {
     await ensureInitialized();
     await _ensureAppFolder();
-
     final name = customName ?? file.uri.pathSegments.last;
-
     final driveFile = drive.File()
       ..name = name
       ..parents = _appFolderId != null ? [_appFolderId!] : null;
-
     final media = drive.Media(file.openRead(), file.lengthSync());
-    final created = await _driveApi!.files.create(
-      driveFile,
-      uploadMedia: media,
-    );
-
+    final created = await _driveApi!.files.create(driveFile, uploadMedia: media);
     final full = await _driveApi!.files.get(
       created.id!,
       $fields:
           'id, name, mimeType, size, createdTime, modifiedTime, imageMediaMetadata, videoMediaMetadata, thumbnailLink, webContentLink, webViewLink',
     ) as drive.File;
-
     return _fileToMediaItem(full);
   }
 
-  /// Download a Drive file to a temporary location.
   Future<File> downloadFile(MediaItem item) async {
     await ensureInitialized();
     if (item.driveFileId == null) {
       throw GoogleDriveException('Cannot download: missing file id');
     }
-
     final dir = await getTemporaryDirectory();
-    final savePath = '${dir.path}/${item.name}';
-    final file = File(savePath);
-
+    final file = File('${dir.path}/${item.name}');
     final response = await _driveApi!.files.get(
       item.driveFileId!,
       downloadOptions: drive.DownloadOptions.fullMedia,
     ) as drive.Media;
-
     final sink = file.openWrite();
     await response.stream.pipe(sink);
     await sink.close();
@@ -192,7 +204,6 @@ class GoogleDriveService {
 class GoogleDriveException implements Exception {
   GoogleDriveException(this.message);
   final String message;
-
   @override
   String toString() => message;
 }
