@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "206736786268",
+    "project_id": "cloud-gallery-ab2a8",
+    "storage_bucket": "cloud-gallery-ab2a8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:206736786268:android:455202a1c0873cb3a7b799",
+        "android_client_info": {
+          "package_name": "com.example.cloud_gallery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSHRTxnEm8PdS-u1-uMqr3eBSuhsFQawM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
