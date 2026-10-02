@@ -29,13 +29,62 @@ android {
         multiDexEnabled = true
     }
 
-    buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Using debug keys so `flutter run --release` works out of the box.
-            signingConfig = signingConfigs.getByName("debug")
+    packaging {
+        resources {
+            excludes += arrayOf(
+                "DebugProbesKt.bin",
+                "kotlin-tooling-metadata.json",
+                "kotlin/**",
+                "META-INF/*.version",
+                "META-INF/**/LICENSE.txt"
+            )
+        }
+        dex {
+            useLegacyPackaging = true
+        }
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+    lint {
+        checkReleaseBuilds = false
+    }
+    signingConfigs {
+        create("test") {
+            storeFile = file("release.keystore")
+            val testPassword = "Ds@king123"
+            keyAlias = "tense"
+            keyPassword = testPassword
+            storePassword = testPassword
+        }
+    }
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+          //  isZipAlignEnabled = true
+           // isPseudoLocalesEnabled = true
+            signingConfig = signingConfigs.getByName("test")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        
+        debug {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("test")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    
 }
 
 flutter {
