@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/cloud_account.dart';
 import '../providers/account_providers.dart';
+import '../providers/app_providers.dart';
 import '../services/account_service.dart';
 import '../theme/app_theme.dart';
 
@@ -17,6 +18,20 @@ class AccountsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Cloud Accounts'),
         actions: [
+          IconButton(
+            tooltip: ref.watch(themeModeProvider) ? 'Light mode' : 'Dark mode',
+            icon: Icon(
+              ref.watch(themeModeProvider)
+                  ? Icons.light_mode_rounded
+                  : Icons.dark_mode_rounded,
+            ),
+            onPressed: () async {
+              final isDark = ref.read(themeModeProvider);
+              final next = !isDark;
+              ref.read(themeModeProvider.notifier).state = next;
+              await setDarkMode(ref.read(sharedPreferencesProvider), next);
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () => ref.read(accountsNotifierProvider.notifier).refresh(),

@@ -28,29 +28,11 @@ class GoogleDriveService {
   bool get isSignedIn => _account != null;
 
   Future<CloudAccount?> signIn() async {
-    try {
-      final account = await _googleSignIn.signIn();
-      if (account == null) return null; // user cancelled
-      _account = account;
-      await _initDriveApi();
-      final about = await _driveApi!.about.get($fields: 'storageQuota,user');
-      final used = int.tryParse(about.storageQuota?.usage ?? '0') ?? 0;
-      final total = int.tryParse(about.storageQuota?.limit ?? '0') ?? 0;
-
-      return CloudAccount(
-        id: account.id,
-        provider: CloudProvider.googleDrive,
-        email: account.email,
-        displayName: account.displayName ?? account.email,
-        photoUrl: account.photoUrl,
-        isConnected: true,
-        usedBytes: used,
-        totalBytes: total > 0 ? total : null,
-        lastSynced: DateTime.now(),
-      );
-    } catch (e) {
-      rethrow;
-    }
+    final account = await _googleSignIn.signIn();
+    if (account == null) return null;
+    _account = account;
+    await _initDriveApi();
+    return _accountFromAbout(account);
   }
 
   Future<void> signOut() async {
@@ -64,6 +46,10 @@ class GoogleDriveService {
     if (account == null) return null;
     _account = account;
     await _initDriveApi();
+    return _accountFromAbout(account);
+  }
+
+  Future<CloudAccount> _accountFromAbout(GoogleSignInAccount account) async {
     final about = await _driveApi!.about.get($fields: 'storageQuota,user');
     final used = int.tryParse(about.storageQuota?.usage ?? '0') ?? 0;
     final total = int.tryParse(about.storageQuota?.limit ?? '0') ?? 0;
@@ -88,31 +74,42 @@ class GoogleDriveService {
     _driveApi = drive.DriveApi(httpClient);
   }
 
-  Future<List<MediaItem>> listMedia({
-    String? pageToken,
-    int pageSize = AppConfig.cloudMediaPageSize,
-  }) async {
-    if (_driveApi == null) {
-      await silentSignIn();
-      if (_driveApi == null) return [];
-    }
+  Future<void> _ensureApi() async {
+    if (_driveApi != null) return;
+    await silentSignIn();
+    if (_driveApi == null) throw StateError('Not signed in to Google Drive');
+  }
 
-    // Images + videos only, not trashed
+  /// List media; loads multiple pages so more than one batch appears.
+  Future<List<MediaItem>> listMedia({
+    int maxItems = 500,
+  }) async {
+    await _ensureApi();
+
     const q =
         "(mimeType contains 'image/' or mimeType contains 'video/') and trashed = false";
 
-    final result = await _driveApi!.files.list(
-      q: q,
-      $fields:
-          'nextPageToken, files(id, name, mimeType, thumbnailLink, webContentLink, size, createdTime, imageMediaMetadata, videoMediaMetadata)',
-      pageSize: pageSize,
-      pageToken: pageToken,
-      orderBy: 'createdTime desc',
-      spaces: 'drive',
-    );
+    final items = <MediaItem>[];
+    String? pageToken;
 
-    final files = result.files ?? [];
-    return files.map(_fileToMediaItem).toList();
+    do {
+      final result = await _driveApi!.files.list(
+        q: q,
+        $fields:
+            'nextPageToken, files(id, name, mimeType, thumbnailLink, webContentLink, webViewLink, size, createdTime, imageMediaMetadata, videoMediaMetadata)',
+        pageSize: AppConfig.cloudMediaPageSize,
+        pageToken: pageToken,
+        orderBy: 'createdTime desc',
+        spaces: 'drive',
+      );
+
+      for (final f in result.files ?? []) {
+        items.add(_fileToMediaItem(f));
+      }
+      pageToken = result.nextPageToken;
+    } while (pageToken != null && items.length < maxItems);
+
+    return items;
   }
 
   MediaItem _fileToMediaItem(drive.File file) {
@@ -134,10 +131,18 @@ class GoogleDriveService {
       if (ms != null) duration = Duration(milliseconds: ms);
     }
 
+    // Prefer larger thumbnail: Drive often serves =s220; bump size for grid quality
+    String? thumb = file.thumbnailLink;
+    if (thumb != null) {
+      thumb = thumb
+          .replaceAll(RegExp(r'=s\d+'), '=s800')
+          .replaceAll(RegExp(r'sz=\d+'), 'sz=800');
+    }
+
     return MediaItem(
       id: 'gdrive_${file.id}',
       title: file.name ?? 'Untitled',
-      thumbnailUrl: file.thumbnailLink,
+      thumbnailUrl: thumb,
       path: file.id,
       type: isVideo ? MediaType.video : MediaType.image,
       source: MediaSource.googleDrive,
@@ -150,9 +155,9 @@ class GoogleDriveService {
     );
   }
 
-  /// Download file content (for save-to-device).
+  /// Download **original** file bytes (full resolution).
   Future<Uint8List?> downloadFile(String fileId) async {
-    if (_driveApi == null) return null;
+    await _ensureApi();
     final media = await _driveApi!.files.get(
       fileId,
       downloadOptions: drive.DownloadOptions.fullMedia,
@@ -165,14 +170,13 @@ class GoogleDriveService {
     return builder.takeBytes();
   }
 
-  /// Upload bytes to Drive (creates a new file in root or optional folder).
   Future<MediaItem?> uploadBytes({
     required String name,
     required Uint8List bytes,
     required String mimeType,
     String? parentFolderId,
   }) async {
-    if (_driveApi == null) return null;
+    await _ensureApi();
 
     final fileMeta = drive.File()
       ..name = name

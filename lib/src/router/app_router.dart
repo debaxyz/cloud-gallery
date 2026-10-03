@@ -46,11 +46,27 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/media/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-          final media = state.extra as MediaItem?;
+          final extra = state.extra;
+          MediaItem? media;
+          List<MediaItem> gallery = const [];
+          int index = 0;
+
+          if (extra is MediaItem) {
+            media = extra;
+          } else if (extra is Map) {
+            media = extra['media'] as MediaItem?;
+            gallery = (extra['gallery'] as List<MediaItem>?) ?? const [];
+            index = (extra['index'] as int?) ?? 0;
+          }
+
           if (media == null) {
             return const Scaffold(body: Center(child: Text('Media not found')));
           }
-          return MediaDetailScreen(media: media);
+          return MediaDetailScreen(
+            media: media,
+            gallery: gallery,
+            initialIndex: index,
+          );
         },
       ),
     ],

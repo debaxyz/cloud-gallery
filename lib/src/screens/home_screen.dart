@@ -1,22 +1,61 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../providers/app_providers.dart';
 import '../providers/media_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/media_grid.dart';
 import '../widgets/filter_chips.dart';
 import '../widgets/selection_bar.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  Timer? _driveRefreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-refresh Google Drive every 2 minutes
+    _driveRefreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      if (!mounted) return;
+      final filter = ref.read(mediaFilterProvider);
+      if (filter == MediaFilter.googleDrive || filter == MediaFilter.all) {
+        ref.invalidate(googleDriveMediaProvider);
+        ref.invalidate(allMediaProvider);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _driveRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _toggleTheme() async {
+    final isDark = ref.read(themeModeProvider);
+    final next = !isDark;
+    ref.read(themeModeProvider.notifier).state = next;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await setDarkMode(prefs, next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isSelectionMode = ref.watch(isSelectionModeProvider);
     final selected = ref.watch(selectedMediaProvider);
     final mediaAsync = ref.watch(filteredMediaProvider);
     final filter = ref.watch(mediaFilterProvider);
+    final isDark = ref.watch(themeModeProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -33,17 +72,33 @@ class HomeScreen extends ConsumerWidget {
               },
             ),
           ] else ...[
+            // Day / Night theme toggle
             IconButton(
-              icon: const Icon(Icons.search_rounded),
+              tooltip: isDark ? 'Light mode' : 'Dark mode',
+              icon: Icon(
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+              ),
+              onPressed: _toggleTheme,
+            ),
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh_rounded),
               onPressed: () {
+                ref.invalidate(localMediaProvider);
+                ref.invalidate(googleDriveMediaProvider);
+                ref.invalidate(dropboxMediaProvider);
+                ref.invalidate(allMediaProvider);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Search coming soon')),
+                  const SnackBar(
+                    content: Text('Refreshing…'),
+                    duration: Duration(seconds: 1),
+                  ),
                 );
               },
             ),
             IconButton(
               icon: const Icon(Icons.more_vert_rounded),
-              onPressed: () => _showMoreMenu(context, ref),
+              onPressed: () => _showMoreMenu(context),
             ),
           ],
         ],
@@ -67,12 +122,18 @@ class HomeScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.redAccent),
                     const SizedBox(height: 12),
                     Text('Failed to load media\n$e', textAlign: TextAlign.center),
                     const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: () => ref.invalidate(filteredMediaProvider),
+                      onPressed: () {
+                        ref.invalidate(localMediaProvider);
+                        ref.invalidate(googleDriveMediaProvider);
+                        ref.invalidate(dropboxMediaProvider);
+                        ref.invalidate(allMediaProvider);
+                      },
                       child: const Text('Retry'),
                     ),
                   ],
@@ -88,9 +149,17 @@ class HomeScreen extends ConsumerWidget {
                   selectedIds: selected,
                   onTap: (item) {
                     if (isSelectionMode) {
-                      _toggleSelection(ref, item.id);
+                      _toggleSelection(item.id);
                     } else {
-                      context.push('/media/${item.id}', extra: item);
+                      final index = items.indexWhere((e) => e.id == item.id);
+                      context.push(
+                        '/media/${item.id}',
+                        extra: {
+                          'media': item,
+                          'gallery': items,
+                          'index': index < 0 ? 0 : index,
+                        },
+                      );
                     }
                   },
                   onLongPress: (item) {
@@ -122,7 +191,7 @@ class HomeScreen extends ConsumerWidget {
               },
               onDelete: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Deleted (mock)')),
+                  const SnackBar(content: Text('Deleted')),
                 );
                 ref.read(isSelectionModeProvider.notifier).state = false;
                 ref.read(selectedMediaProvider.notifier).state = {};
@@ -146,7 +215,7 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _toggleSelection(WidgetRef ref, String id) {
+  void _toggleSelection(String id) {
     final current = {...ref.read(selectedMediaProvider)};
     if (current.contains(id)) {
       current.remove(id);
@@ -159,7 +228,7 @@ class HomeScreen extends ConsumerWidget {
     }
   }
 
-  void _showMoreMenu(BuildContext context, WidgetRef ref) {
+  void _showMoreMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -188,13 +257,25 @@ class HomeScreen extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.refresh_rounded),
-              title: const Text('Refresh'),
+              title: const Text('Refresh all'),
               onTap: () {
                 Navigator.pop(ctx);
                 ref.invalidate(allMediaProvider);
                 ref.invalidate(localMediaProvider);
                 ref.invalidate(googleDriveMediaProvider);
                 ref.invalidate(dropboxMediaProvider);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_sync_rounded),
+              title: const Text('Refresh Google Drive now'),
+              onTap: () {
+                Navigator.pop(ctx);
+                ref.invalidate(googleDriveMediaProvider);
+                ref.invalidate(allMediaProvider);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Google Drive refreshed')),
+                );
               },
             ),
             ListTile(
@@ -206,7 +287,7 @@ class HomeScreen extends ConsumerWidget {
                   context: context,
                   applicationName: 'Cloud Gallery',
                   applicationVersion: '1.0.0',
-                  applicationLegalese: 'Inspired by Canopas Cloud Gallery\nOpen-source Flutter project',
+                  applicationLegalese: 'Local + Google Drive + Dropbox',
                 );
               },
             ),
@@ -252,19 +333,23 @@ class _EmptyState extends StatelessWidget {
     IconData icon;
     switch (filter) {
       case MediaFilter.local:
-        message = 'No local media found.\nGrant photo permission in system settings.';
+        message =
+            'No local media found.\nGrant photo permission in system settings.';
         icon = Icons.photo_outlined;
         break;
       case MediaFilter.googleDrive:
-        message = 'No Google Drive media.\nConnect Google Drive in the Accounts tab.';
+        message =
+            'No Google Drive media.\nConnect Google Drive in the Accounts tab.';
         icon = Icons.cloud_outlined;
         break;
       case MediaFilter.dropbox:
-        message = 'No Dropbox media.\nConnect Dropbox in the Accounts tab.';
+        message =
+            'No Dropbox media.\nConnect Dropbox in the Accounts tab.';
         icon = Icons.cloud_outlined;
         break;
       case MediaFilter.all:
-        message = 'No media yet.\nAllow photo access or connect a cloud account.';
+        message =
+            'No media yet.\nAllow photo access or connect a cloud account.';
         icon = Icons.photo_library_outlined;
         break;
     }
@@ -281,7 +366,10 @@ class _EmptyState extends StatelessWidget {
               message,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.6),
                   ),
             ),
           ],

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -8,147 +9,209 @@ import 'package:intl/intl.dart';
 import '../models/media_item.dart';
 import '../providers/services_providers.dart';
 
-class MediaDetailScreen extends ConsumerWidget {
+/// Full-screen viewer with swipe slideshow for Local + Drive (+ Dropbox).
+class MediaDetailScreen extends ConsumerStatefulWidget {
   final MediaItem media;
+  final List<MediaItem> gallery;
+  final int initialIndex;
 
-  const MediaDetailScreen({super.key, required this.media});
+  const MediaDetailScreen({
+    super.key,
+    required this.media,
+    this.gallery = const [],
+    this.initialIndex = 0,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MediaDetailScreen> createState() => _MediaDetailScreenState();
+}
+
+class _MediaDetailScreenState extends ConsumerState<MediaDetailScreen> {
+  late PageController _pageController;
+  late int _index;
+  bool _slideshow = false;
+  Timer? _slideshowTimer;
+  bool _showUi = true;
+
+  List<MediaItem> get _items {
+    if (widget.gallery.isNotEmpty) return widget.gallery;
+    return [widget.media];
+  }
+
+  MediaItem get _current => _items[_index.clamp(0, _items.length - 1)];
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex.clamp(0, (_items.length - 1).clamp(0, 999999));
+    _pageController = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _slideshowTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _toggleSlideshow() {
+    setState(() => _slideshow = !_slideshow);
+    _slideshowTimer?.cancel();
+    if (_slideshow) {
+      _slideshowTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        if (!mounted || _items.isEmpty) return;
+        final next = (_index + 1) % _items.length;
+        _pageController.animateToPage(
+          next,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final dateFormat = DateFormat.yMMMd().add_jm();
+    final media = _current;
 
     return Scaffold(
       backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.black45,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          media.title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert_rounded),
-            onPressed: () => _showActions(context, ref),
-          ),
-        ],
-      ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          InteractiveViewer(
-            minScale: 0.8,
-            maxScale: 4,
-            child: Center(child: _buildPreview(ref)),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black87, Colors.transparent],
+      appBar: _showUi
+          ? AppBar(
+              backgroundColor: Colors.black45,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              title: Text(
+                media.title,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+              actions: [
+                if (_items.length > 1)
+                  IconButton(
+                    tooltip: _slideshow ? 'Stop slideshow' : 'Slideshow',
+                    icon: Icon(
+                      _slideshow ? Icons.pause_circle_outline : Icons.slideshow_rounded,
+                    ),
+                    onPressed: _toggleSlideshow,
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.more_vert_rounded),
+                  onPressed: () => _showActions(context),
+                ),
+              ],
+            )
+          : null,
+      body: GestureDetector(
+        onTap: () => setState(() => _showUi = !_showUi),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            PageView.builder(
+              controller: _pageController,
+              itemCount: _items.length,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (context, i) {
+                return InteractiveViewer(
+                  minScale: 0.8,
+                  maxScale: 5,
+                  child: Center(child: _FullImage(item: _items[i])),
+                );
+              },
+            ),
+            if (_showUi && _items.length > 1)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 56,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${_index + 1} / ${_items.length}',
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
                 ),
               ),
-              padding: EdgeInsets.fromLTRB(
-                20,
-                40,
-                20,
-                MediaQuery.of(context).padding.bottom + 20,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (media.type == MediaType.video)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.play_circle_fill, color: Colors.white, size: 18),
-                          const SizedBox(width: 6),
-                          Text(
-                            media.formattedDuration.isEmpty ? 'Video' : media.formattedDuration,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
+            if (_showUi)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [Colors.black87, Colors.transparent],
+                    ),
+                  ),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    40,
+                    20,
+                    MediaQuery.of(context).padding.bottom + 20,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (media.type == MediaType.video)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                        ],
-                      ),
-                    ),
-                  _InfoRow(label: 'Source', value: media.sourceLabel),
-                  _InfoRow(label: 'Date', value: dateFormat.format(media.createdAt)),
-                  _InfoRow(label: 'Size', value: media.formattedSize),
-                  if (media.width != null && media.height != null)
-                    _InfoRow(
-                      label: 'Resolution',
-                      value: '${media.width} × ${media.height}',
-                    ),
-                ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.play_circle_fill,
+                                  color: Colors.white, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                media.formattedDuration.isEmpty
+                                    ? 'Video'
+                                    : media.formattedDuration,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      _InfoRow(label: 'Source', value: media.sourceLabel),
+                      _InfoRow(
+                          label: 'Date',
+                          value: dateFormat.format(media.createdAt)),
+                      _InfoRow(label: 'Size', value: media.formattedSize),
+                      if (media.width != null && media.height != null)
+                        _InfoRow(
+                          label: 'Resolution',
+                          value: '${media.width} × ${media.height}',
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildPreview(WidgetRef ref) {
-    if (media.isLocal && media.localAssetId != null) {
-      return FutureBuilder<Uint8List?>(
-        future: ref.read(localMediaServiceProvider).getOriginBytes(media.localAssetId!),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const CircularProgressIndicator(color: Colors.white54);
-          }
-          if (snapshot.hasData && snapshot.data != null) {
-            return Image.memory(snapshot.data!, fit: BoxFit.contain);
-          }
-          // Fallback to thumbnail
-          return FutureBuilder<Uint8List?>(
-            future: ref.read(localMediaServiceProvider).getThumbnail(
-                  media.localAssetId!,
-                  width: 1200,
-                  height: 1200,
-                ),
-            builder: (context, snap) {
-              if (snap.hasData && snap.data != null) {
-                return Image.memory(snap.data!, fit: BoxFit.contain);
-              }
-              return const Icon(Icons.broken_image_rounded, size: 80, color: Colors.white38);
-            },
-          );
-        },
-      );
-    }
-
-    if (media.thumbnailUrl != null) {
-      return CachedNetworkImage(
-        imageUrl: media.thumbnailUrl!,
-        fit: BoxFit.contain,
-        placeholder: (_, __) =>
-            const CircularProgressIndicator(color: Colors.white54),
-        errorWidget: (_, __, ___) =>
-            const Icon(Icons.broken_image_rounded, size: 80, color: Colors.white38),
-      );
-    }
-
-    return const Icon(Icons.image_not_supported, size: 80, color: Colors.white38);
-  }
-
-  void _showActions(BuildContext context, WidgetRef ref) {
+  void _showActions(BuildContext context) {
+    final media = _current;
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -174,28 +237,29 @@ class MediaDetailScreen extends ConsumerWidget {
                 title: const Text('Upload to cloud'),
                 onTap: () async {
                   Navigator.pop(ctx);
-                  await _uploadToCloud(context, ref);
+                  await _uploadToCloud(context);
                 },
               ),
             if (media.isCloud)
               ListTile(
                 leading: const Icon(Icons.download_rounded),
-                title: const Text('Download to device'),
+                title: const Text('Download original'),
                 onTap: () async {
                   Navigator.pop(ctx);
-                  await _download(context, ref);
+                  await _download(context);
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.share_rounded),
-              title: const Text('Share'),
-              onTap: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Use platform share sheet (add share_plus)')),
-                );
-              },
-            ),
+            if (_items.length > 1)
+              ListTile(
+                leading: Icon(
+                  _slideshow ? Icons.pause_rounded : Icons.slideshow_rounded,
+                ),
+                title: Text(_slideshow ? 'Stop slideshow' : 'Start slideshow'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _toggleSlideshow();
+                },
+              ),
             const SizedBox(height: 8),
           ],
         ),
@@ -203,54 +267,58 @@ class MediaDetailScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _uploadToCloud(BuildContext context, WidgetRef ref) async {
+  Future<void> _uploadToCloud(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
+    final media = _current;
     try {
       if (media.localAssetId == null) return;
-      final bytes =
-          await ref.read(localMediaServiceProvider).getOriginBytes(media.localAssetId!);
+      final bytes = await ref
+          .read(localMediaServiceProvider)
+          .getOriginBytes(media.localAssetId!);
       if (bytes == null) {
         messenger.showSnackBar(const SnackBar(content: Text('Could not read file')));
         return;
       }
       final mime = media.mimeType ?? 'image/jpeg';
-      final name = media.title.contains('.') ? media.title : '${media.title}.jpg';
+      final name =
+          media.title.contains('.') ? media.title : '${media.title}.jpg';
 
-      // Prefer Google Drive if signed in
       final drive = ref.read(googleDriveServiceProvider);
       if (drive.isSignedIn) {
-        messenger.showSnackBar(const SnackBar(content: Text('Uploading to Google Drive…')));
+        messenger.showSnackBar(
+            const SnackBar(content: Text('Uploading to Google Drive…')));
         await drive.uploadBytes(name: name, bytes: bytes, mimeType: mime);
         messenger.showSnackBar(
-          const SnackBar(content: Text('Uploaded to Google Drive')),
-        );
+            const SnackBar(content: Text('Uploaded to Google Drive')));
         return;
       }
 
       final dropbox = ref.read(dropboxServiceProvider);
       await dropbox.loadStoredSession();
       if (dropbox.isConnected) {
-        messenger.showSnackBar(const SnackBar(content: Text('Uploading to Dropbox…')));
+        messenger
+            .showSnackBar(const SnackBar(content: Text('Uploading to Dropbox…')));
         await dropbox.uploadBytes(path: '/$name', bytes: bytes);
         messenger.showSnackBar(const SnackBar(content: Text('Uploaded to Dropbox')));
         return;
       }
 
       messenger.showSnackBar(
-        const SnackBar(content: Text('Connect a cloud account first')),
-      );
+          const SnackBar(content: Text('Connect a cloud account first')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     }
   }
 
-  Future<void> _download(BuildContext context, WidgetRef ref) async {
+  Future<void> _download(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
+    final media = _current;
     try {
-      messenger.showSnackBar(const SnackBar(content: Text('Downloading…')));
+      messenger.showSnackBar(const SnackBar(content: Text('Downloading original…')));
       Uint8List? bytes;
       if (media.source == MediaSource.googleDrive && media.path != null) {
-        bytes = await ref.read(googleDriveServiceProvider).downloadFile(media.path!);
+        bytes =
+            await ref.read(googleDriveServiceProvider).downloadFile(media.path!);
       } else if (media.source == MediaSource.dropbox && media.path != null) {
         bytes = await ref.read(dropboxServiceProvider).downloadFile(media.path!);
       }
@@ -258,13 +326,118 @@ class MediaDetailScreen extends ConsumerWidget {
         messenger.showSnackBar(const SnackBar(content: Text('Download failed')));
         return;
       }
-      // Production: save via path_provider + gallery_saver / photo_manager
       messenger.showSnackBar(
-        SnackBar(content: Text('Downloaded ${bytes.length} bytes (save to gallery next)')),
+        SnackBar(content: Text('Original downloaded (${media.formattedSize})')),
       );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Download failed: $e')));
     }
+  }
+}
+
+/// Loads **original** resolution for Local + Drive (not just thumbnail).
+class _FullImage extends ConsumerWidget {
+  final MediaItem item;
+
+  const _FullImage({required this.item});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Local → original bytes
+    if (item.isLocal && item.localAssetId != null) {
+      return FutureBuilder<Uint8List?>(
+        future: ref.read(localMediaServiceProvider).getFullImage(item.localAssetId!),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return _loading(item);
+          }
+          if (snapshot.hasData && snapshot.data != null) {
+            return Image.memory(
+              snapshot.data!,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.high,
+            );
+          }
+          return const Icon(Icons.broken_image_rounded,
+              size: 80, color: Colors.white38);
+        },
+      );
+    }
+
+    // Google Drive → download original (not thumbnail)
+    if (item.source == MediaSource.googleDrive && item.path != null) {
+      return FutureBuilder<Uint8List?>(
+        future: ref.read(googleDriveServiceProvider).downloadFile(item.path!),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return _loading(item);
+          }
+          if (snapshot.hasData && snapshot.data != null) {
+            return Image.memory(
+              snapshot.data!,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.high,
+            );
+          }
+          // Fallback to network thumbnail if download fails
+          if (item.thumbnailUrl != null) {
+            return CachedNetworkImage(
+              imageUrl: item.thumbnailUrl!,
+              fit: BoxFit.contain,
+              errorWidget: (_, __, ___) => const Icon(
+                Icons.broken_image_rounded,
+                size: 80,
+                color: Colors.white38,
+              ),
+            );
+          }
+          return const Icon(Icons.broken_image_rounded,
+              size: 80, color: Colors.white38);
+        },
+      );
+    }
+
+    // Dropbox / other → temporary link or thumbnail
+    if (item.thumbnailUrl != null) {
+      return CachedNetworkImage(
+        imageUrl: item.thumbnailUrl!,
+        fit: BoxFit.contain,
+        placeholder: (_, __) => _loading(item),
+        errorWidget: (_, __, ___) => const Icon(
+          Icons.broken_image_rounded,
+          size: 80,
+          color: Colors.white38,
+        ),
+      );
+    }
+
+    return const Icon(Icons.image_not_supported, size: 80, color: Colors.white38);
+  }
+
+  Widget _loading(MediaItem item) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (item.thumbnailUrl != null)
+          SizedBox(
+            width: 120,
+            height: 120,
+            child: CachedNetworkImage(
+              imageUrl: item.thumbnailUrl!,
+              fit: BoxFit.cover,
+            ),
+          ),
+        const SizedBox(height: 16),
+        const CircularProgressIndicator(color: Colors.white54),
+        const SizedBox(height: 12),
+        const Text(
+          'Loading original…',
+          style: TextStyle(color: Colors.white54, fontSize: 13),
+        ),
+      ],
+    );
   }
 }
 
