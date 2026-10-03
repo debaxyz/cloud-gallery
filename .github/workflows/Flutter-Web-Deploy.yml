@@ -1,15 +1,12 @@
-name: Flutter Web Deploy
+name: Flutter Web Build
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  build-deploy:
+  build-web:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,14 +19,17 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Flutter version
+        run: flutter --version
+
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build Web
-        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+      - name: Build Flutter Web
+        run: flutter build web --release
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload Web Build
+        uses: actions/upload-artifact@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build/web
+          name: flutter-web
+          path: build/web
