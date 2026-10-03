@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/media_item.dart';
+import '../providers/services_providers.dart';
 import '../theme/app_theme.dart';
 
 class MediaGrid extends StatelessWidget {
@@ -47,7 +51,7 @@ class MediaGrid extends StatelessWidget {
   }
 }
 
-class _MediaTile extends StatelessWidget {
+class _MediaTile extends ConsumerWidget {
   final MediaItem item;
   final bool isSelected;
   final bool isSelectionMode;
@@ -63,7 +67,7 @@ class _MediaTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -80,30 +84,12 @@ class _MediaTile extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (item.thumbnailUrl != null)
-                CachedNetworkImage(
-                  imageUrl: item.thumbnailUrl!,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  ),
-                  errorWidget: (_, __, ___) => Container(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
-                  ),
-                )
-              else
-                Container(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: const Icon(Icons.image_outlined, color: Colors.grey),
-                ),
-              // Source badge
+              _Thumbnail(item: item),
               Positioned(
                 top: 6,
                 left: 6,
                 child: _SourceBadge(source: item.source),
               ),
-              // Video duration
               if (item.type == MediaType.video)
                 Positioned(
                   bottom: 6,
@@ -120,7 +106,7 @@ class _MediaTile extends StatelessWidget {
                         const Icon(Icons.play_arrow_rounded, size: 12, color: Colors.white),
                         const SizedBox(width: 2),
                         Text(
-                          item.formattedDuration,
+                          item.formattedDuration.isEmpty ? 'Video' : item.formattedDuration,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 11,
@@ -131,7 +117,6 @@ class _MediaTile extends StatelessWidget {
                     ),
                   ),
                 ),
-              // Selection overlay
               if (isSelectionMode)
                 Positioned(
                   top: 6,
@@ -150,21 +135,66 @@ class _MediaTile extends StatelessWidget {
                         : null,
                   ),
                 ),
-              // Favorite heart
               if (item.isFavorite && !isSelectionMode)
                 const Positioned(
                   top: 6,
                   right: 6,
-                  child: Icon(
-                    Icons.favorite_rounded,
-                    size: 18,
-                    color: Colors.redAccent,
-                  ),
+                  child: Icon(Icons.favorite_rounded, size: 18, color: Colors.redAccent),
                 ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _Thumbnail extends ConsumerWidget {
+  final MediaItem item;
+
+  const _Thumbnail({required this.item});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final placeholder = Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    );
+
+    // Local: load thumbnail from photo_manager
+    if (item.isLocal && item.localAssetId != null) {
+      return FutureBuilder<Uint8List?>(
+        future: ref
+            .read(localMediaServiceProvider)
+            .getThumbnail(item.localAssetId!),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return Image.memory(
+              snapshot.data!,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            );
+          }
+          return placeholder;
+        },
+      );
+    }
+
+    // Cloud: network image
+    if (item.thumbnailUrl != null && item.thumbnailUrl!.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: item.thumbnailUrl!,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => placeholder,
+        errorWidget: (_, __, ___) => Container(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
+        ),
+      );
+    }
+
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: const Icon(Icons.image_outlined, color: Colors.grey),
     );
   }
 }
@@ -176,8 +206,8 @@ class _SourceBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color color;
-    IconData icon;
+    late Color color;
+    late IconData icon;
     switch (source) {
       case MediaSource.local:
         color = Colors.green;

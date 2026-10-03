@@ -1,56 +1,107 @@
 import '../models/cloud_account.dart';
+import 'dropbox_service.dart';
+import 'google_drive_service.dart';
 
+/// Manages cloud account sessions (Google Drive + Dropbox).
 class AccountService {
+  AccountService({
+    GoogleDriveService? drive,
+    DropboxService? dropbox,
+  })  : drive = drive ?? GoogleDriveService(),
+        dropbox = dropbox ?? DropboxService();
+
+  final GoogleDriveService drive;
+  final DropboxService dropbox;
+
+  /// Returns current connection state for both providers.
   Future<List<CloudAccount>> getAccounts() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return [
-      const CloudAccount(
-        id: 'gd_1',
+    final list = <CloudAccount>[];
+
+    // Google Drive
+    try {
+      final gd = await drive.silentSignIn();
+      if (gd != null) {
+        list.add(gd);
+      } else {
+        list.add(const CloudAccount(
+          id: 'gd_placeholder',
+          provider: CloudProvider.googleDrive,
+          email: '',
+          displayName: 'Google Drive',
+          isConnected: false,
+        ));
+      }
+    } catch (_) {
+      list.add(const CloudAccount(
+        id: 'gd_placeholder',
         provider: CloudProvider.googleDrive,
-        email: 'you@gmail.com',
-        displayName: 'You',
-        isConnected: true,
-        usedBytes: 12 * 1024 * 1024 * 1024, // 12 GB
-        totalBytes: 15 * 1024 * 1024 * 1024, // 15 GB
-      ),
-      const CloudAccount(
-        id: 'db_1',
-        provider: CloudProvider.dropbox,
-        email: 'you@dropbox.com',
-        displayName: 'You',
+        email: '',
+        displayName: 'Google Drive',
         isConnected: false,
-        usedBytes: 0,
-        totalBytes: 2 * 1024 * 1024 * 1024, // 2 GB free
-      ),
-    ];
-  }
-
-  Future<CloudAccount> connectAccount(CloudProvider provider) async {
-    await Future.delayed(const Duration(milliseconds: 1200));
-    // Simulate successful OAuth
-    if (provider == CloudProvider.googleDrive) {
-      return const CloudAccount(
-        id: 'gd_1',
-        provider: CloudProvider.googleDrive,
-        email: 'you@gmail.com',
-        displayName: 'You',
-        isConnected: true,
-        usedBytes: 12 * 1024 * 1024 * 1024,
-        totalBytes: 15 * 1024 * 1024 * 1024,
-      );
+      ));
     }
-    return const CloudAccount(
-      id: 'db_1',
-      provider: CloudProvider.dropbox,
-      email: 'you@dropbox.com',
-      displayName: 'You',
-      isConnected: true,
-      usedBytes: 450 * 1024 * 1024,
-      totalBytes: 2 * 1024 * 1024 * 1024,
-    );
+
+    // Dropbox
+    try {
+      final db = await dropbox.restoreSession();
+      if (db != null) {
+        list.add(db);
+      } else {
+        list.add(const CloudAccount(
+          id: 'db_placeholder',
+          provider: CloudProvider.dropbox,
+          email: '',
+          displayName: 'Dropbox',
+          isConnected: false,
+        ));
+      }
+    } catch (_) {
+      list.add(const CloudAccount(
+        id: 'db_placeholder',
+        provider: CloudProvider.dropbox,
+        email: '',
+        displayName: 'Dropbox',
+        isConnected: false,
+      ));
+    }
+
+    return list;
   }
 
-  Future<void> disconnectAccount(String id) async {
-    await Future.delayed(const Duration(milliseconds: 500));
+  Future<CloudAccount> connect(CloudProvider provider) async {
+    switch (provider) {
+      case CloudProvider.googleDrive:
+        final account = await drive.signIn();
+        if (account == null) {
+          throw StateError('Google sign-in cancelled');
+        }
+        return account;
+      case CloudProvider.dropbox:
+        // Starts external browser; caller must complete via handleDropboxRedirect
+        await dropbox.startAuth();
+        throw DropboxAuthPendingException();
+    }
   }
+
+  Future<CloudAccount> completeDropboxAuth(Uri redirectUri) {
+    return dropbox.handleRedirect(redirectUri);
+  }
+
+  Future<void> disconnect(CloudProvider provider) async {
+    switch (provider) {
+      case CloudProvider.googleDrive:
+        await drive.signOut();
+        break;
+      case CloudProvider.dropbox:
+        await dropbox.disconnect();
+        break;
+    }
+  }
+}
+
+/// Thrown when Dropbox OAuth is started and waiting for redirect.
+class DropboxAuthPendingException implements Exception {
+  @override
+  String toString() =>
+      'Dropbox auth started in browser. Complete sign-in, then handle the redirect URI.';
 }

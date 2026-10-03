@@ -8,7 +8,9 @@ enum MediaType { image, video }
 class MediaItem {
   final String id;
   final String title;
+  /// Network URL (Drive/Dropbox) or null for local.
   final String? thumbnailUrl;
+  /// Local: asset id / file path. Cloud: remote file id or path.
   final String? path;
   final MediaType type;
   final MediaSource source;
@@ -18,6 +20,9 @@ class MediaItem {
   final int? width;
   final int? height;
   final bool isFavorite;
+  /// photo_manager AssetEntity id (local only)
+  final String? localAssetId;
+  final String? mimeType;
 
   const MediaItem({
     required this.id,
@@ -32,6 +37,8 @@ class MediaItem {
     this.width,
     this.height,
     this.isFavorite = false,
+    this.localAssetId,
+    this.mimeType,
   });
 
   MediaItem copyWith({
@@ -47,6 +54,8 @@ class MediaItem {
     int? width,
     int? height,
     bool? isFavorite,
+    String? localAssetId,
+    String? mimeType,
   }) {
     return MediaItem(
       id: id ?? this.id,
@@ -61,6 +70,8 @@ class MediaItem {
       width: width ?? this.width,
       height: height ?? this.height,
       isFavorite: isFavorite ?? this.isFavorite,
+      localAssetId: localAssetId ?? this.localAssetId,
+      mimeType: mimeType ?? this.mimeType,
     );
   }
 
@@ -90,4 +101,7 @@ class MediaItem {
     final s = duration!.inSeconds % 60;
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
+
+  bool get isLocal => source == MediaSource.local;
+  bool get isCloud => !isLocal;
 }

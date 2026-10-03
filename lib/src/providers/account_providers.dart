@@ -2,12 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/cloud_account.dart';
 import '../services/account_service.dart';
-
-final accountServiceProvider = Provider<AccountService>((ref) => AccountService());
-
-final accountsProvider = FutureProvider<List<CloudAccount>>((ref) async {
-  return ref.watch(accountServiceProvider).getAccounts();
-});
+import 'services_providers.dart';
 
 final accountsNotifierProvider =
     StateNotifierProvider<AccountsNotifier, AsyncValue<List<CloudAccount>>>((ref) {
@@ -21,46 +16,58 @@ class AccountsNotifier extends StateNotifier<AsyncValue<List<CloudAccount>>> {
     _load();
   }
 
+  AccountService get _service => _ref.read(accountServiceProvider);
+
   Future<void> _load() async {
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _ref.read(accountServiceProvider).getAccounts());
+    state = await AsyncValue.guard(() => _service.getAccounts());
   }
 
   Future<void> connect(CloudProvider provider) async {
-    final current = state.valueOrNull ?? [];
-    // Optimistic update
-    final updated = current.map((a) {
-      if (a.provider == provider) {
-        return a.copyWith(isConnected: true);
-      }
-      return a;
-    }).toList();
-    state = AsyncValue.data(updated);
-
     try {
-      final account = await _ref.read(accountServiceProvider).connectAccount(provider);
-      final finalList = current.map((a) {
-        if (a.provider == provider) return account;
-        return a;
-      }).toList();
-      // Ensure the account exists
-      if (!finalList.any((a) => a.provider == provider)) {
-        finalList.add(account);
+      final account = await _service.connect(provider);
+      final current = List<CloudAccount>.from(state.valueOrNull ?? []);
+      final idx = current.indexWhere((a) => a.provider == provider);
+      if (idx >= 0) {
+        current[idx] = account;
+      } else {
+        current.add(account);
       }
-      state = AsyncValue.data(finalList);
+      state = AsyncValue.data(current);
+    } on DropboxAuthPendingException {
+      // UI should show "Complete sign-in in browser"
+      rethrow;
     } catch (e, st) {
       state = AsyncValue.error(e, st);
+      rethrow;
     }
   }
 
-  Future<void> disconnect(String id) async {
-    final current = state.valueOrNull ?? [];
-    final updated = current.map((a) {
-      if (a.id == id) return a.copyWith(isConnected: false);
-      return a;
-    }).toList();
-    state = AsyncValue.data(updated);
-    await _ref.read(accountServiceProvider).disconnectAccount(id);
+  Future<void> completeDropboxAuth(Uri uri) async {
+    final account = await _service.completeDropboxAuth(uri);
+    final current = List<CloudAccount>.from(state.valueOrNull ?? []);
+    final idx = current.indexWhere((a) => a.provider == CloudProvider.dropbox);
+    if (idx >= 0) {
+      current[idx] = account;
+    } else {
+      current.add(account);
+    }
+    state = AsyncValue.data(current);
+  }
+
+  Future<void> disconnect(CloudProvider provider) async {
+    await _service.disconnect(provider);
+    final current = List<CloudAccount>.from(state.valueOrNull ?? []);
+    final idx = current.indexWhere((a) => a.provider == provider);
+    if (idx >= 0) {
+      current[idx] = current[idx].copyWith(
+        isConnected: false,
+        email: '',
+        usedBytes: null,
+        totalBytes: null,
+      );
+    }
+    state = AsyncValue.data(current);
   }
 
   Future<void> refresh() => _load();

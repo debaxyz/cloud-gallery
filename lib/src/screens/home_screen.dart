@@ -252,19 +252,19 @@ class _EmptyState extends StatelessWidget {
     IconData icon;
     switch (filter) {
       case MediaFilter.local:
-        message = 'No local media found.\nGrant photo permission or add some photos.';
+        message = 'No local media found.\nGrant photo permission in system settings.';
         icon = Icons.photo_outlined;
         break;
       case MediaFilter.googleDrive:
-        message = 'No Google Drive media.\nConnect your account in the Accounts tab.';
+        message = 'No Google Drive media.\nConnect Google Drive in the Accounts tab.';
         icon = Icons.cloud_outlined;
         break;
       case MediaFilter.dropbox:
-        message = 'No Dropbox media.\nConnect your account in the Accounts tab.';
+        message = 'No Dropbox media.\nConnect Dropbox in the Accounts tab.';
         icon = Icons.cloud_outlined;
         break;
       case MediaFilter.all:
-        message = 'No media yet.\nConnect cloud accounts or add local photos.';
+        message = 'No media yet.\nAllow photo access or connect a cloud account.';
         icon = Icons.photo_library_outlined;
         break;
     }

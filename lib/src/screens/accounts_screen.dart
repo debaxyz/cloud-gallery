@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/cloud_account.dart';
 import '../providers/account_providers.dart';
+import '../services/account_service.dart';
 import '../theme/app_theme.dart';
 
 class AccountsScreen extends ConsumerWidget {
@@ -24,21 +25,39 @@ class AccountsScreen extends ConsumerWidget {
       ),
       body: accountsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Error: $e', textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => ref.read(accountsNotifierProvider.notifier).refresh(),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
         data: (accounts) {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               Text(
-                'Connect your cloud storage to view, upload and back up media.',
+                'Connect Google Drive or Dropbox to browse, upload and back up media.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.65),
                     ),
               ),
               const SizedBox(height: 24),
               ...accounts.map((account) => _AccountCard(account: account)),
-              const SizedBox(height: 24),
-              _InfoCard(),
+              const SizedBox(height: 16),
+              _SetupHints(),
             ],
           );
         },
@@ -93,7 +112,11 @@ class _AccountCard extends ConsumerWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        account.isConnected ? account.email : 'Not connected',
+                        account.isConnected
+                            ? (account.email.isNotEmpty
+                                ? account.email
+                                : account.displayName)
+                            : 'Not connected',
                         style: TextStyle(
                           fontSize: 13,
                           color: Theme.of(context)
@@ -125,44 +148,50 @@ class _AccountCard extends ConsumerWidget {
             ),
             if (account.isConnected) ...[
               const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Storage',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              if (account.usedBytes != null) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Storage',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.6),
+                      ),
                     ),
-                  ),
-                  Text(
-                    account.usedStorageLabel,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: account.usageFraction,
-                  minHeight: 8,
-                  backgroundColor: color.withValues(alpha: 0.12),
-                  valueColor: AlwaysStoppedAnimation(color),
+                    Text(
+                      account.usedStorageLabel,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: account.usageFraction,
+                    minHeight: 8,
+                    backgroundColor: color.withValues(alpha: 0.12),
+                    valueColor: AlwaysStoppedAnimation(color),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
+                        ref.invalidate(accountsNotifierProvider);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Sync started…')),
+                          const SnackBar(content: Text('Refreshing account…')),
                         );
                       },
                       icon: const Icon(Icons.sync_rounded, size: 18),
-                      label: const Text('Sync now'),
+                      label: const Text('Refresh'),
                       style: OutlinedButton.styleFrom(
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -178,7 +207,7 @@ class _AccountCard extends ConsumerWidget {
                         builder: (ctx) => AlertDialog(
                           title: const Text('Disconnect?'),
                           content: Text(
-                            'Disconnect ${account.providerName}? Your local media will stay on the device.',
+                            'Disconnect ${account.providerName}? Local media stays on the device.',
                           ),
                           actions: [
                             TextButton(
@@ -192,10 +221,10 @@ class _AccountCard extends ConsumerWidget {
                           ],
                         ),
                       );
-                      if (confirm == true) {
+                      if (confirm == true && context.mounted) {
                         await ref
                             .read(accountsNotifierProvider.notifier)
-                            .disconnect(account.id);
+                            .disconnect(account.provider);
                       }
                     },
                     style: OutlinedButton.styleFrom(
@@ -214,24 +243,7 @@ class _AccountCard extends ConsumerWidget {
                 width: double.infinity,
                 height: 48,
                 child: FilledButton.icon(
-                  onPressed: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    messenger.showSnackBar(
-                      SnackBar(
-                        content: Text('Connecting to ${account.providerName}…'),
-                        duration: const Duration(seconds: 1),
-                      ),
-                    );
-                    await ref
-                        .read(accountsNotifierProvider.notifier)
-                        .connect(account.provider);
-                    messenger.showSnackBar(
-                      SnackBar(
-                        content: Text('${account.providerName} connected successfully!'),
-                        backgroundColor: AppTheme.secondary,
-                      ),
-                    );
-                  },
+                  onPressed: () => _connect(context, ref, account.provider),
                   icon: const Icon(Icons.link_rounded),
                   label: Text('Connect ${account.providerName}'),
                   style: FilledButton.styleFrom(
@@ -248,9 +260,49 @@ class _AccountCard extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _connect(
+    BuildContext context,
+    WidgetRef ref,
+    CloudProvider provider,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(accountsNotifierProvider.notifier).connect(provider);
+      if (context.mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('${provider == CloudProvider.googleDrive ? "Google Drive" : "Dropbox"} connected'),
+            backgroundColor: AppTheme.secondary,
+          ),
+        );
+      }
+    } on DropboxAuthPendingException {
+      if (context.mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Complete Dropbox sign-in in the browser. '
+              'The app will receive the redirect automatically on mobile.',
+            ),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Sign-in failed: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
 }
 
-class _InfoCard extends StatelessWidget {
+class _SetupHints extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -262,10 +314,10 @@ class _InfoCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.info_outline_rounded, color: AppTheme.primary, size: 22),
+                Icon(Icons.settings_outlined, color: AppTheme.primary, size: 22),
                 const SizedBox(width: 10),
                 Text(
-                  'How it works',
+                  'API setup required',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: AppTheme.primary,
@@ -275,14 +327,23 @@ class _InfoCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              '• Connect Google Drive or Dropbox with OAuth\n'
-              '• Browse media from all sources in one gallery\n'
-              '• Multi-select to upload / download / delete\n'
-              '• Auto-backup keeps local photos safe in the cloud\n\n'
-              'This demo uses mock data. Replace the services with real Google Drive & Dropbox APIs for production.',
+              'Google Drive\n'
+              '• Create OAuth client in Google Cloud Console\n'
+              '• Enable Drive API\n'
+              '• Pass GOOGLE_SERVER_CLIENT_ID via --dart-define\n'
+              '• Configure SHA-1 / bundle ID for Android / iOS\n\n'
+              'Dropbox\n'
+              '• Create app at dropbox.com/developers\n'
+              '• Enable files.content.read / write\n'
+              '• Set redirect URI (cloudgallery://oauth/dropbox)\n'
+              '• Pass DROPBOX_APP_KEY via --dart-define\n\n'
+              'See README for full steps.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    height: 1.5,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.75),
+                    height: 1.45,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.75),
                   ),
             ),
           ],

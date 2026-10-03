@@ -45,5 +45,24 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Photo library access -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Cloud Gallery needs access to your photos and videos to display and back them up.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Cloud Gallery needs permission to save downloaded media to your library.</string>
+	<!-- Dropbox / OAuth URL scheme -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.canopas.cloud_gallery</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cloudgallery</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
