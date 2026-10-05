@@ -57,7 +57,7 @@ android {
         create("test") {
             storeFile = file("release.keystore")
             val testPassword = "test123"
-            keyAlias = "cloud"
+            keyAlias = "release"
             keyPassword = testPassword
             storePassword = testPassword
         }
