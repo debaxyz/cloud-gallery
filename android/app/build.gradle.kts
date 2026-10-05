@@ -55,9 +55,9 @@ android {
     }
     signingConfigs {
         create("test") {
-            storeFile = file("debug.keystore")
+            storeFile = file("release.keystore")
             val testPassword = "test123"
-            keyAlias = "test123"
+            keyAlias = "cloud"
             keyPassword = testPassword
             storePassword = testPassword
         }
