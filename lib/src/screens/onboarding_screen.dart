@@ -22,7 +22,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       title: 'All Your Memories\nin One Spot',
       subtitle:
           'View and manage photos & videos from your device, Google Drive and Dropbox — all in a beautiful unified gallery.',
-      color: AppTheme.primary,
+      color: AppTheme.primaryAccent,
     ),
     _OnboardPage(
       icon: Icons.cloud_sync_rounded,
@@ -90,10 +90,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           width: 140,
                           height: 140,
                           decoration: BoxDecoration(
-                            color: page.color.withValues(alpha: 0.12),
+                            color: page.color.withValues(alpha: 0.10),
                             shape: BoxShape.circle,
+                            border: Border.all(
+                              color: page.color.withValues(alpha: 0.15),
+                              width: 1.5,
+                            ),
+                            boxShadow: AppTheme.softShadow,
                           ),
-                          child: Icon(page.icon, size: 72, color: page.color),
+                          child: Icon(page.icon, size: 64, color: page.color),
                         ),
                         const SizedBox(height: 48),
                         Text(
@@ -132,7 +137,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   height: 8,
                   decoration: BoxDecoration(
                     color: _currentPage == i
-                        ? AppTheme.primary
+                        ? AppTheme.primaryAccent
                         : theme.colorScheme.onSurface.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
@@ -157,7 +162,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     }
                   },
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
+                    backgroundColor: AppTheme.primaryAccent,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),

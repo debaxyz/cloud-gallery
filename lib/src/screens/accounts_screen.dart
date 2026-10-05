@@ -91,8 +91,17 @@ class _AccountCard extends ConsumerWidget {
     final isDrive = account.provider == CloudProvider.googleDrive;
     final color = isDrive ? const Color(0xFF4285F4) : const Color(0xFF0061FF);
 
-    return Card(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.cardDark : AppTheme.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(
+          color: isDark ? const Color(0xFF374151) : AppTheme.border,
+        ),
+        boxShadow: isDark ? null : AppTheme.softShadow,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -320,8 +329,15 @@ class _AccountCard extends ConsumerWidget {
 class _SetupHints extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: AppTheme.primary.withValues(alpha: 0.06),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.primaryAccent.withValues(alpha: isDark ? 0.12 : 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(
+          color: AppTheme.primaryAccent.withValues(alpha: 0.15),
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -329,13 +345,13 @@ class _SetupHints extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.settings_outlined, color: AppTheme.primary, size: 22),
+                Icon(Icons.settings_outlined, color: AppTheme.primaryAccent, size: 22),
                 const SizedBox(width: 10),
                 Text(
                   'API setup required',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.primary,
+                    color: AppTheme.primaryAccent,
                   ),
                 ),
               ],

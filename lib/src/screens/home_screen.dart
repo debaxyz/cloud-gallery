@@ -360,7 +360,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 72, color: AppTheme.primary.withValues(alpha: 0.5)),
+            Icon(icon, size: 72, color: AppTheme.primaryAccent.withValues(alpha: 0.5)),
             const SizedBox(height: 20),
             Text(
               message,

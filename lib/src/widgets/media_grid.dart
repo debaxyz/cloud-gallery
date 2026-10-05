@@ -27,11 +27,16 @@ class MediaGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 100),
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.space12,
+        0,
+        AppTheme.space12,
+        100,
+      ),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        mainAxisSpacing: 4,
-        crossAxisSpacing: 4,
+        mainAxisSpacing: 6,
+        crossAxisSpacing: 6,
         childAspectRatio: 1,
       ),
       itemCount: items.length,
@@ -68,19 +73,27 @@ class _MediaTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+        duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: isSelected
-              ? Border.all(color: AppTheme.primary, width: 3)
-              : null,
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          border: Border.all(
+            color: isSelected
+                ? AppTheme.primaryAccent
+                : (isDark ? const Color(0xFF374151) : AppTheme.border),
+            width: isSelected ? 2.5 : 1,
+          ),
+          boxShadow: isDark ? null : AppTheme.softShadow,
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(isSelected ? 7 : 10),
+          borderRadius: BorderRadius.circular(
+            isSelected ? AppTheme.radiusSm - 1.5 : AppTheme.radiusSm,
+          ),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -97,16 +110,19 @@ class _MediaTile extends ConsumerWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(4),
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.play_arrow_rounded, size: 12, color: Colors.white),
+                        const Icon(Icons.play_arrow_rounded,
+                            size: 12, color: Colors.white),
                         const SizedBox(width: 2),
                         Text(
-                          item.formattedDuration.isEmpty ? 'Video' : item.formattedDuration,
+                          item.formattedDuration.isEmpty
+                              ? 'Video'
+                              : item.formattedDuration,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 11,
@@ -123,12 +139,14 @@ class _MediaTile extends ConsumerWidget {
                   right: 6,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
-                    width: 24,
-                    height: 24,
+                    width: 22,
+                    height: 22,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isSelected ? AppTheme.primary : Colors.black38,
-                      border: Border.all(color: Colors.white, width: 2),
+                      color: isSelected
+                          ? AppTheme.primaryAccent
+                          : Colors.black.withValues(alpha: 0.35),
+                      border: Border.all(color: Colors.white, width: 1.5),
                     ),
                     child: isSelected
                         ? const Icon(Icons.check, size: 14, color: Colors.white)
@@ -139,7 +157,11 @@ class _MediaTile extends ConsumerWidget {
                 const Positioned(
                   top: 6,
                   right: 6,
-                  child: Icon(Icons.favorite_rounded, size: 18, color: Colors.redAccent),
+                  child: Icon(
+                    Icons.favorite_rounded,
+                    size: 16,
+                    color: Color(0xFFEF4444),
+                  ),
                 ),
             ],
           ),
@@ -156,11 +178,11 @@ class _Thumbnail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final placeholder = Container(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: isDark ? const Color(0xFF2A2E38) : AppTheme.cardSoft,
     );
 
-    // Local: load thumbnail from photo_manager
     if (item.isLocal && item.localAssetId != null) {
       return FutureBuilder<Uint8List?>(
         future: ref
@@ -179,22 +201,29 @@ class _Thumbnail extends ConsumerWidget {
       );
     }
 
-    // Cloud: network image
     if (item.thumbnailUrl != null && item.thumbnailUrl!.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: item.thumbnailUrl!,
         fit: BoxFit.cover,
         placeholder: (_, __) => placeholder,
         errorWidget: (_, __, ___) => Container(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
+          color: isDark ? const Color(0xFF2A2E38) : AppTheme.cardSoft,
+          child: Icon(
+            Icons.broken_image_outlined,
+            color: AppTheme.textMuted,
+            size: AppTheme.iconMd,
+          ),
         ),
       );
     }
 
     return Container(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: const Icon(Icons.image_outlined, color: Colors.grey),
+      color: isDark ? const Color(0xFF2A2E38) : AppTheme.cardSoft,
+      child: Icon(
+        Icons.image_outlined,
+        color: AppTheme.textMuted,
+        size: AppTheme.iconMd,
+      ),
     );
   }
 }
@@ -210,7 +239,7 @@ class _SourceBadge extends StatelessWidget {
     late IconData icon;
     switch (source) {
       case MediaSource.local:
-        color = Colors.green;
+        color = const Color(0xFF10B981);
         icon = Icons.phone_android_rounded;
         break;
       case MediaSource.googleDrive:
@@ -226,10 +255,11 @@ class _SourceBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.9),
+        color: color.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(6),
+        boxShadow: AppTheme.softShadow,
       ),
-      child: Icon(icon, size: 12, color: Colors.white),
+      child: Icon(icon, size: 11, color: Colors.white),
     );
   }
 }

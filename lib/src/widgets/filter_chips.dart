@@ -19,88 +19,34 @@ class FilterChips extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          _Chip(
+          SoftPillButton(
             label: 'All',
             icon: Icons.apps_rounded,
             selected: current == MediaFilter.all,
-            onTap: () => onChanged(MediaFilter.all),
+            onPressed: () => onChanged(MediaFilter.all),
           ),
-          const SizedBox(width: 8),
-          _Chip(
+          const SizedBox(width: AppTheme.space8),
+          SoftPillButton(
             label: 'Local',
             icon: Icons.phone_android_rounded,
             selected: current == MediaFilter.local,
-            onTap: () => onChanged(MediaFilter.local),
+            onPressed: () => onChanged(MediaFilter.local),
           ),
-          const SizedBox(width: 8),
-          _Chip(
+          const SizedBox(width: AppTheme.space8),
+          SoftPillButton(
             label: 'Drive',
             icon: Icons.add_to_drive_rounded,
             selected: current == MediaFilter.googleDrive,
-            onTap: () => onChanged(MediaFilter.googleDrive),
+            onPressed: () => onChanged(MediaFilter.googleDrive),
           ),
-          const SizedBox(width: 8),
-          _Chip(
+          const SizedBox(width: AppTheme.space8),
+          SoftPillButton(
             label: 'Dropbox',
             icon: Icons.cloud_rounded,
             selected: current == MediaFilter.dropbox,
-            onTap: () => onChanged(MediaFilter.dropbox),
+            onPressed: () => onChanged(MediaFilter.dropbox),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _Chip({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? AppTheme.primary
-          : Theme.of(context).colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: selected
-                    ? Colors.white
-                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: selected
-                      ? Colors.white
-                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

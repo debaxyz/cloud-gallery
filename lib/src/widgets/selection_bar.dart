@@ -18,35 +18,50 @@ class SelectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Material(
-      elevation: 12,
-      color: Theme.of(context).colorScheme.surface,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _Action(
-                icon: Icons.cloud_upload_rounded,
-                label: 'Upload',
-                color: AppTheme.primary,
-                onTap: onUpload,
-              ),
-              _Action(
-                icon: Icons.download_rounded,
-                label: 'Download',
-                color: AppTheme.secondary,
-                onTap: onDownload,
-              ),
-              _Action(
-                icon: Icons.delete_outline_rounded,
-                label: 'Delete',
-                color: Colors.redAccent,
-                onTap: onDelete,
-              ),
-            ],
+      color: isDark ? AppTheme.cardDark : AppTheme.card,
+      elevation: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: isDark ? const Color(0xFF374151) : AppTheme.border,
+            ),
+          ),
+          boxShadow: isDark ? null : AppTheme.softShadow,
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.space8,
+              vertical: AppTheme.space8,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _Action(
+                  icon: Icons.cloud_upload_rounded,
+                  label: 'Upload',
+                  color: AppTheme.primaryAccent,
+                  onTap: onUpload,
+                ),
+                _Action(
+                  icon: Icons.download_rounded,
+                  label: 'Download',
+                  color: AppTheme.secondary,
+                  onTap: onDownload,
+                ),
+                _Action(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Delete',
+                  color: const Color(0xFFEF4444),
+                  onTap: onDelete,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -69,25 +84,28 @@ class _Action extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 26),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: AppTheme.iconLg),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
