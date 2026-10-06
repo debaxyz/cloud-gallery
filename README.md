@@ -1,4 +1,3 @@
-
 # Cloud Gallery
 
 Production-ready Flutter app to manage photos & videos from **local storage**, **Google Drive**, and **Dropbox**.
@@ -90,3 +89,56 @@ lib/src/
 ## License
 
 Apache 2.0
+
+## Firebase setup
+
+Cloud Gallery uses **Firebase Analytics** and **Crashlytics** (same as the original Canopas app).
+
+### 1. Create a Firebase project
+
+1. Open [Firebase Console](https://console.firebase.google.com/)
+2. Create project (or use existing)
+3. Add Android app: package `com.canopas.cloud_gallery`
+4. Add iOS app: bundle id from Xcode
+5. (Optional) Add Web app
+
+### 2. Enable products
+
+- **Analytics** — enabled by default on new projects  
+- **Crashlytics** — Build → Crashlytics → Enable
+
+### 3. Configure Flutter
+
+```bash
+dart pub global activate flutterfire_cli
+flutterfire configure
+```
+
+This overwrites `lib/firebase_options.dart` and adds platform config files  
+(`google-services.json`, `GoogleService-Info.plist`).
+
+### 4. Android
+
+Ensure `android/settings.gradle.kts` / app `build.gradle.kts` include the Google services plugin (FlutterFire usually does this).
+
+### 5. Run
+
+```bash
+flutter pub get
+flutter run
+```
+
+Until `flutterfire configure` is run, the app starts normally and **skips** Firebase if credentials are still placeholders.
+
+### Events logged
+
+| Event | When |
+|-------|------|
+| `connect_account` | Google Drive / Dropbox connected |
+| `disconnect_account` | Account disconnected |
+| `media_upload` / `media_download` | Transfer actions |
+| `open_media` | Photo/video opened |
+| `filter_change` | Gallery filter changed |
+| `slideshow_start` | Slideshow started |
+| `theme_change` | Light/dark toggle |
+

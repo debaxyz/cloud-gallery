@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../providers/app_providers.dart';
+import '../providers/firebase_providers.dart';
 import '../providers/media_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/media_grid.dart';
@@ -47,6 +48,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.read(themeModeProvider.notifier).state = next;
     final prefs = ref.read(sharedPreferencesProvider);
     await setDarkMode(prefs, next);
+    ref.read(analyticsServiceProvider).logThemeChange(next);
   }
 
   @override
@@ -112,6 +114,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 current: filter,
                 onChanged: (f) {
                   ref.read(mediaFilterProvider.notifier).state = f;
+                  ref.read(analyticsServiceProvider).logFilterChange(f.name);
                 },
               ),
             ),

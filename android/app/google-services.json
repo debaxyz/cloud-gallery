@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "527711336533",
+    "project_id": "cloud-gallery-5d08b",
+    "storage_bucket": "cloud-gallery-5d08b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:527711336533:android:80761daf3db5da8c71fcdc",
+        "android_client_info": {
+          "package_name": "com.canopas.cloud_gallery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZ6dDzoDGeNiBBhopXLBiCH4z6JymIgco"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

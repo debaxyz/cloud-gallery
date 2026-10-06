@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/cloud_account.dart';
 import '../providers/account_providers.dart';
+import '../providers/firebase_providers.dart';
 import '../providers/app_providers.dart';
 import '../services/account_service.dart';
 import '../theme/app_theme.dart';
@@ -293,6 +294,8 @@ class _AccountCard extends ConsumerWidget {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(accountsNotifierProvider.notifier).connect(provider);
+      final name = provider == CloudProvider.googleDrive ? 'google_drive' : 'dropbox';
+      ref.read(analyticsServiceProvider).logConnectAccount(name);
       if (context.mounted) {
         messenger.showSnackBar(
           SnackBar(
